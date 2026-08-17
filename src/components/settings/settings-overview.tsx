@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode, type MouseEvent } from 'react';
+import Link from 'next/link';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -141,6 +142,16 @@ export function SettingsOverview({
     };
   }, [user?.id, accountId, canManageMembers]);
 
+  // Same pre-hydration click gap as SettingsRail: a real `<Link href>`
+  // gives a click before React attaches listeners a working native
+  // navigation fallback instead of doing nothing.
+  const handleTileClick = (section: SettingsSection) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.defaultPrevented || e.button !== 0) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    onSelect(section);
+  };
+
   const displayName = profile?.full_name || profile?.email || t('yourAccount');
   const initial = (profile?.full_name || profile?.email || 'U').charAt(0).toUpperCase();
   const roleMeta = accountRole ? ROLE_META[accountRole] : null;
@@ -255,10 +266,10 @@ export function SettingsOverview({
           const meta = SECTION_META[section];
           const Icon = meta.icon;
           return (
-            <button
+            <Link
               key={section}
-              type="button"
-              onClick={() => onSelect(section)}
+              href={`/settings?tab=${section}`}
+              onClick={handleTileClick(section)}
               className={cn(
                 'group flex items-start gap-3.5 rounded-xl border border-border bg-card p-4 text-left transition-colors',
                 'hover:border-primary-soft-2 hover:bg-card-2',
@@ -282,7 +293,7 @@ export function SettingsOverview({
                 </span>
               </span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </button>
+            </Link>
           );
         })}
       </div>

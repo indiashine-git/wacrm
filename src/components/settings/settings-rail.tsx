@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode, type MouseEvent } from 'react';
+import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 
 import { cn } from '@/lib/utils';
@@ -32,7 +33,23 @@ export function SettingsRail({
   hints?: Partial<Record<SettingsSection, ReactNode>>;
 }) {
   const t = useTranslations('Settings');
-  const activeRef = useRef<HTMLButtonElement>(null);
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  // A plain <button onClick> has no effect until React hydrates and
+  // attaches the listener — a click in that window (common on a slow
+  // connection, or just impatient clicking right after navigation)
+  // was silently swallowed (issue: settings tabs "don't load" on the
+  // first click). Rendering a real `<Link href>` gives every click a
+  // working fallback: the browser's native navigation handles it even
+  // before hydration, landing on the same section via the page's own
+  // `?tab=` server-side read. Once hydrated, this handler intercepts
+  // the click for the instant client-side transition instead.
+  const handleClick = (s: SettingsSection) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.defaultPrevented || e.button !== 0) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    onSelect(s);
+  };
 
   // When horizontal (mobile), keep the active chip in view. On desktop
   // the rail is a static column, so skip.
@@ -74,11 +91,11 @@ export function SettingsRail({
               const Icon = meta.icon;
               const isActive = s === active;
               return (
-                <button
+                <Link
                   key={s}
                   ref={isActive ? activeRef : undefined}
-                  type="button"
-                  onClick={() => onSelect(s)}
+                  href={`/settings?tab=${s}`}
+                  onClick={handleClick(s)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
                     'flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors',
@@ -100,7 +117,7 @@ export function SettingsRail({
                       {hints[s]}
                     </span>
                   ) : null}
-                </button>
+                </Link>
               );
             })}
           </div>
