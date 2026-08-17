@@ -16,10 +16,22 @@ export default function ApprovalsPage() {
   const [accounts, setAccounts] = useState<PendingAccount[]>([]);
   const [reasonById, setReasonById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
+    setError(null);
     const res = await fetch("/api/platform/approvals");
+    if (!res.ok) {
+      setError(
+        res.status === 401
+          ? "Not authenticated. Reload the page and re-enter the platform credentials when prompted."
+          : `Failed to load pending accounts (${res.status}).`
+      );
+      setAccounts([]);
+      setLoading(false);
+      return;
+    }
     const body = await res.json();
     setAccounts(body.accounts ?? []);
     setLoading(false);
@@ -35,10 +47,15 @@ export default function ApprovalsPage() {
       alert("A rejection reason is required.");
       return;
     }
-    await fetch(`/api/platform/approvals/${id}`, {
+    const res = await fetch(`/api/platform/approvals/${id}`, {
       method: "POST",
       body: JSON.stringify(action === "approve" ? { action } : { action, reason }),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error ?? `Failed to ${action} this account (${res.status}).`);
+      return;
+    }
     await load();
   }
 
@@ -47,7 +64,8 @@ export default function ApprovalsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-8">
       <h1 className="text-xl font-semibold">Pending account approvals</h1>
-      {accounts.length === 0 && (
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {!error && accounts.length === 0 && (
         <p className="text-muted-foreground">No pending accounts.</p>
       )}
       {accounts.map((account) => (

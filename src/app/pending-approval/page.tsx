@@ -5,6 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 
@@ -35,6 +36,14 @@ async function getAccountStatus(): Promise<"pending" | "rejected" | "approved" |
 
 export default async function PendingApprovalPage() {
   const status = await getAccountStatus();
+
+  // A just-approved user who still has this page cached/bookmarked
+  // (or lands here mid-refresh) should go straight to the dashboard
+  // rather than see stale "awaiting approval" copy.
+  if (status === "approved") {
+    redirect("/dashboard");
+  }
+
   const isRejected = status === "rejected";
 
   return (

@@ -28,7 +28,12 @@ export async function POST(request: Request) {
   const limit = checkRateLimit(`signup-notify:${ip}`, RATE_LIMITS.signupNotify);
   if (!limit.success) return rateLimitResponse(limit);
 
-  const body = (await request.json()) as { userId?: string };
+  let body: { userId?: string };
+  try {
+    body = (await request.json()) as { userId?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
   if (!body.userId || !UUID_RE.test(body.userId)) {
     return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
   }

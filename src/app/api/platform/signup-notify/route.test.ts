@@ -35,6 +35,16 @@ describe("POST /api/platform/signup-notify", () => {
     expect(notify).toHaveBeenCalledWith("signup_pending", { accountId: "acct-1" });
   });
 
+  it("400s on malformed JSON body instead of 500ing", async () => {
+    const request = new Request("https://x/api/platform/signup-notify", {
+      method: "POST",
+      body: "{not json",
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
   it("400s on a malformed userId", async () => {
     const request = new Request("https://x/api/platform/signup-notify", {
       method: "POST",
