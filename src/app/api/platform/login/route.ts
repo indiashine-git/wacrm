@@ -3,6 +3,16 @@ import { supabasePlatformAdmin } from "@/lib/platform/admin-client";
 import { verifyPassword, createSessionToken, SESSION_COOKIE_NAME } from "@/lib/platform/admin-auth";
 import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
+// Fixed dummy hash (password "dummy-password-never-matches", generated
+// once offline) — verified against on an unknown email so this route
+// spends the same scrypt-shaped time whether the email exists or not.
+// Without this, an unknown email returns in ~1ms while a real one takes
+// the full scrypt cost, letting an attacker enumerate valid admin
+// emails purely from response latency despite the identical error
+// message below.
+const DUMMY_HASH =
+  "2bdecee7a73ae3d2424f07142d3f567e:7e60d0f8eaaf27467e1e26b901a803bb6297ec01587053a1ea02bb9477f958fb4b4a3c75b9be229d61567597ab33f59cd9561158c2ae87ca5d115bbc8fdecebb";
+
 function getClientIp(request: Request): string {
   const xff = request.headers.get("x-forwarded-for");
   if (xff) return xff.split(",")[0].trim();
@@ -34,14 +44,14 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   // Same generic message either way — don't let the wire distinguish
-  // "unknown email" from "wrong password."
+  // "unknown email" from "wrong password," including via timing: an
+  // unknown email still runs a scrypt verify (against DUMMY_HASH, see
+  // above) so both paths cost the same.
   const invalid = () =>
     NextResponse.json({ error: "Invalid email or password" }, { status: 401 });
 
-  if (!row) return invalid();
-
-  const ok = await verifyPassword(body.password, row.password_hash);
-  if (!ok) return invalid();
+  const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
+  if (!row || !ok) return invalid();
 
   const token = createSessionToken(row.id);
   const response = NextResponse.json({ ok: true });

@@ -53,11 +53,14 @@ describe("POST /api/platform/login", () => {
     expect(response.headers.get("set-cookie")).toContain("wacrm_platform_session=");
   });
 
-  it("401s on an unknown email", async () => {
+  it("401s on an unknown email, but still runs a verify (constant-time defense)", async () => {
     maybeSingle.mockResolvedValue({ data: null, error: null });
+    vi.mocked(verifyPassword).mockResolvedValue(false);
     const response = await POST(req({ email: "nobody@example.com", password: "x" }));
     expect(response.status).toBe(401);
-    expect(verifyPassword).not.toHaveBeenCalled();
+    // Must still call verifyPassword (against the dummy hash) so an
+    // unknown email doesn't return measurably faster than a known one.
+    expect(verifyPassword).toHaveBeenCalled();
   });
 
   it("401s on a wrong password", async () => {
