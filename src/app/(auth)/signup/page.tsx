@@ -68,7 +68,7 @@ function SignupPageInner() {
       ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
       : undefined;
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -83,6 +83,17 @@ function SignupPageInner() {
       setError(error.message);
       setLoading(false);
       return;
+    }
+
+    // Best-effort — a failed notification must never block signup.
+    // No session exists yet (email confirmation is required before
+    // one is issued), so this is driven by the returned user id, not
+    // a cookie session.
+    if (data.user?.id) {
+      fetch("/api/platform/signup-notify", {
+        method: "POST",
+        body: JSON.stringify({ userId: data.user.id }),
+      }).catch(() => {});
     }
 
     setSuccess(true);
