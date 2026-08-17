@@ -66,9 +66,8 @@ vi.mock("@/lib/supabase/server", () => ({
   createClient: () => createClient(),
 }));
 
-const { getCurrentAccount, UnauthorizedError, ForbiddenError } = await import(
-  "./account"
-);
+const { getCurrentAccount, UnauthorizedError, ForbiddenError, PendingApprovalError } =
+  await import("./account");
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -83,7 +82,10 @@ describe("getCurrentAccount", () => {
           data: { account_id: "acct-1", account_role: "owner" },
           error: null,
         },
-        accounts: { data: { id: "acct-1", name: "Acme" }, error: null },
+        accounts: {
+          data: { id: "acct-1", name: "Acme", status: "approved" },
+          error: null,
+        },
       },
     });
     createClient.mockReturnValue(client);
@@ -94,6 +96,7 @@ describe("getCurrentAccount", () => {
       userId: "user-1",
       accountId: "acct-1",
       role: "owner",
+      accountStatus: "approved",
       account: { id: "acct-1", name: "Acme" },
     });
 
@@ -172,5 +175,63 @@ describe("getCurrentAccount", () => {
     await expect(getCurrentAccount()).rejects.toThrow(
       "Profile is not linked to an account",
     );
+  });
+
+  // ------------------------------------------------------------
+  // Approval gate (accounts.status) — added alongside migration 040.
+  // ------------------------------------------------------------
+
+  it("throws PendingApprovalError for a pending account", async () => {
+    const { client } = makeClient({
+      user: { id: "user-1" },
+      byTable: {
+        profiles: {
+          data: { account_id: "acct-1", account_role: "owner" },
+          error: null,
+        },
+        accounts: {
+          data: { id: "acct-1", name: "Acme", status: "pending" },
+          error: null,
+        },
+      },
+    });
+    createClient.mockReturnValue(client);
+    await expect(getCurrentAccount()).rejects.toBeInstanceOf(PendingApprovalError);
+  });
+
+  it("throws PendingApprovalError for a rejected account", async () => {
+    const { client } = makeClient({
+      user: { id: "user-1" },
+      byTable: {
+        profiles: {
+          data: { account_id: "acct-1", account_role: "owner" },
+          error: null,
+        },
+        accounts: {
+          data: { id: "acct-1", name: "Acme", status: "rejected" },
+          error: null,
+        },
+      },
+    });
+    createClient.mockReturnValue(client);
+    await expect(getCurrentAccount()).rejects.toBeInstanceOf(PendingApprovalError);
+  });
+
+  it("throws ForbiddenError for an unrecognized status value", async () => {
+    const { client } = makeClient({
+      user: { id: "user-1" },
+      byTable: {
+        profiles: {
+          data: { account_id: "acct-1", account_role: "owner" },
+          error: null,
+        },
+        accounts: {
+          data: { id: "acct-1", name: "Acme", status: "bogus" },
+          error: null,
+        },
+      },
+    });
+    createClient.mockReturnValue(client);
+    await expect(getCurrentAccount()).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

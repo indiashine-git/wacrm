@@ -43,7 +43,7 @@ function makeSupabaseMock() {
             error: null,
           }
         case 'accounts':
-          return { data: { id: 'acct-1', name: 'Acme' }, error: null }
+          return { data: { id: 'acct-1', name: 'Acme', status: 'approved' }, error: null }
         case 'contacts':
           return { data: contactRow, error: null }
         case 'conversations':
