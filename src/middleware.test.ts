@@ -14,6 +14,11 @@ let refreshedCookies: Array<{
   value: string;
   options: Record<string, unknown>;
 }> = [];
+// Account approval status the mocked `accounts` table returns for the
+// signed-in user. Defaults to "approved" so every pre-existing test in
+// this file (written before the approval gate existed) keeps passing
+// through unmodified — only the new tests below override it.
+let mockAccountStatus: "pending" | "approved" | "rejected" | null = "approved";
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: (
@@ -32,6 +37,24 @@ vi.mock("@supabase/ssr", () => ({
         return { data: { user: mockUser } };
       },
     },
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => {
+            if (table === "profiles") {
+              return { data: mockUser ? { account_id: "acct-1" } : null, error: null };
+            }
+            if (table === "accounts") {
+              return {
+                data: mockAccountStatus ? { status: mockAccountStatus } : null,
+                error: null,
+              };
+            }
+            return { data: null, error: null };
+          },
+        }),
+      }),
+    }),
   }),
 }));
 
@@ -43,6 +66,7 @@ beforeEach(() => {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
   mockUser = null;
   refreshedCookies = [];
+  mockAccountStatus = "approved";
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -109,5 +133,45 @@ describe("middleware — refreshed auth cookies survive redirects", () => {
     // No redirect — the normal NextResponse.next() already carries cookies.
     expect(res.headers.get("location")).toBeNull();
     expect(res.cookies.get(ROTATED.name)?.value).toBe(ROTATED.value);
+  });
+});
+
+describe("middleware — account approval gate", () => {
+  it("redirects an authenticated user with a pending account to /pending-approval", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "pending";
+
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/pending-approval");
+  });
+
+  it("redirects an authenticated user with a rejected account to /pending-approval", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "rejected";
+
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/pending-approval");
+  });
+
+  it("does not redirect an approved account", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "approved";
+
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("does not redirect a pending account away from /pending-approval itself", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "pending";
+
+    const res = await middleware(new NextRequest("https://app.test/pending-approval"));
+
+    expect(res.headers.get("location")).toBeNull();
   });
 });

@@ -42,6 +42,38 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
+  // Approval gate — an authenticated user whose account is not yet
+  // approved gets sent to /pending-approval for any path. Excluded:
+  // /pending-approval itself (avoid a redirect loop), and /platform
+  // (the operator approval surface, gated separately by nginx Basic
+  // Auth — not by this per-tenant account context at all).
+  if (
+    user &&
+    request.nextUrl.pathname !== "/pending-approval" &&
+    !request.nextUrl.pathname.startsWith("/platform")
+  ) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("account_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (profile?.account_id) {
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("status")
+        .eq("id", profile.account_id)
+        .maybeSingle();
+
+      if (account && account.status !== "approved") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/pending-approval";
+        url.search = "";
+        return withRefreshedCookies(NextResponse.redirect(url));
+      }
+    }
+  }
+
   // Auth pages - redirect to dashboard if already logged in.
   // Exception: when an invite token is in the query string we
   // send the already-signed-in user to /join/<token> instead so
