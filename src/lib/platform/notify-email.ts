@@ -4,6 +4,7 @@ export interface EmailMessage {
   to: string;
   subject: string;
   text: string;
+  html: string;
 }
 
 let _transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
@@ -26,5 +27,6 @@ export async function sendEmail(message: EmailMessage): Promise<void> {
     to: message.to,
     subject: message.subject,
     text: message.text,
+    html: message.html,
   });
 }
