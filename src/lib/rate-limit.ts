@@ -140,6 +140,10 @@ export const RATE_LIMITS = {
    *  successful redemption mutates two profiles and an invite row, so
    *  the abuse surface is "spam join attempts." */
   invitationRedeem: { limit: 10, windowMs: 60_000 },
+  /** Superadmin login attempt (public, per-IP). Tight — this is a
+   *  credential-stuffing / brute-force target, unlike ordinary user
+   *  login which Supabase Auth itself already rate-limits. */
+  platformLogin: { limit: 5, windowMs: 60_000 },
   /** Signup notification trigger (public, per-IP). No session exists
    *  yet at this point in the flow (see /api/platform/signup-notify),
    *  so there's nothing else to key on. A real signup fires this

@@ -10,13 +10,12 @@ export async function GET(request: Request) {
 
   const { data: accounts, error } = await admin
     .from("accounts")
-    .select("id, name, created_at, owner_user_id")
-    .eq("status", "pending")
-    .order("created_at", { ascending: true });
+    .select("id, name, status, created_at, owner_user_id")
+    .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[GET /api/platform/approvals] query error:", error);
-    return NextResponse.json({ error: "Failed to load pending accounts" }, { status: 500 });
+    console.error("[GET /api/platform/accounts] query error:", error);
+    return NextResponse.json({ error: "Failed to load accounts" }, { status: 500 });
   }
 
   const withEmails = await Promise.all(
@@ -25,6 +24,7 @@ export async function GET(request: Request) {
       return {
         id: account.id,
         name: account.name,
+        status: account.status,
         ownerEmail: data.user?.email ?? "(unknown)",
         createdAt: account.created_at,
       };
