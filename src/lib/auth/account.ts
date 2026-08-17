@@ -29,7 +29,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
-import { hasMinRole, isAccountRole, type AccountRole } from "./roles";
+import { hasMinRole, isAccountRole, isAccountStatus, type AccountRole, type AccountStatus } from "./roles";
 
 // ------------------------------------------------------------
 // Errors
@@ -54,6 +54,14 @@ export class ForbiddenError extends Error {
   }
 }
 
+export class PendingApprovalError extends Error {
+  readonly status = 403 as const;
+  constructor(message = "Account is awaiting approval") {
+    super(message);
+    this.name = "PendingApprovalError";
+  }
+}
+
 /**
  * Convert one of the typed errors above (or anything else) into a
  * `NextResponse`. Routes can do:
@@ -67,7 +75,11 @@ export class ForbiddenError extends Error {
  * server internals out of the wire.
  */
 export function toErrorResponse(err: unknown): NextResponse {
-  if (err instanceof UnauthorizedError || err instanceof ForbiddenError) {
+  if (
+    err instanceof UnauthorizedError ||
+    err instanceof ForbiddenError ||
+    err instanceof PendingApprovalError
+  ) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
   console.error("[toErrorResponse] uncategorized error:", err);
@@ -87,6 +99,8 @@ export interface AccountContext {
   accountId: string;
   /** Caller's role within their account. */
   role: AccountRole;
+  /** Caller's account approval status — always "approved" when this resolves. */
+  accountStatus: AccountStatus;
   /** Lightweight account meta — id + name. */
   account: { id: string; name: string };
 }
@@ -149,7 +163,7 @@ export async function getCurrentAccount(): Promise<AccountContext> {
   // RLS, so it stays robust against cache staleness and older schemas.
   const { data: account, error: accountErr } = await supabase
     .from("accounts")
-    .select("id, name")
+    .select("id, name, status")
     .eq("id", data.account_id)
     .maybeSingle();
 
@@ -162,12 +176,19 @@ export async function getCurrentAccount(): Promise<AccountContext> {
     // or an RLS gap. Same "can't scope this user" outcome as above.
     throw new ForbiddenError("Profile is not linked to an account");
   }
+  if (!isAccountStatus(account.status)) {
+    throw new ForbiddenError(`Unknown account status: ${account.status}`);
+  }
+  if (account.status !== "approved") {
+    throw new PendingApprovalError();
+  }
 
   return {
     supabase,
     userId: user.id,
     accountId: data.account_id,
     role: data.account_role,
+    accountStatus: account.status,
     account: { id: account.id, name: account.name },
   };
 }
