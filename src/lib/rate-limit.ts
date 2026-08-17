@@ -140,6 +140,13 @@ export const RATE_LIMITS = {
    *  successful redemption mutates two profiles and an invite row, so
    *  the abuse surface is "spam join attempts." */
   invitationRedeem: { limit: 10, windowMs: 60_000 },
+  /** Signup notification trigger (public, per-IP). No session exists
+   *  yet at this point in the flow (see /api/platform/signup-notify),
+   *  so there's nothing else to key on. A real signup fires this
+   *  once; anything past a handful of calls from one IP in a minute
+   *  is someone replaying a known user id to spam the operator's
+   *  email/Telegram/WhatsApp, not a real signup burst. */
+  signupNotify: { limit: 5, windowMs: 60_000 },
   /** Admin-only account / member-management actions: create/revoke
    *  invitation, rename account, change member role, remove member,
    *  transfer ownership. 30/min per user is comfortably above any

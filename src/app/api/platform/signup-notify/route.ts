@@ -11,10 +11,23 @@
 import { NextResponse } from "next/server";
 import { supabasePlatformAdmin } from "@/lib/platform/admin-client";
 import { notify } from "@/lib/platform/notify";
+import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from "@/lib/rate-limit";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function getClientIp(request: Request): string {
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) return xff.split(",")[0].trim();
+  const xri = request.headers.get("x-real-ip");
+  if (xri) return xri.trim();
+  return "unknown";
+}
+
 export async function POST(request: Request) {
+  const ip = getClientIp(request);
+  const limit = checkRateLimit(`signup-notify:${ip}`, RATE_LIMITS.signupNotify);
+  if (!limit.success) return rateLimitResponse(limit);
+
   const body = (await request.json()) as { userId?: string };
   if (!body.userId || !UUID_RE.test(body.userId)) {
     return NextResponse.json({ error: "Invalid userId" }, { status: 400 });
