@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ModeToggle } from "@/components/layout/mode-toggle";
 
 export default function PlatformLoginPage() {
   const router = useRouter();
@@ -41,7 +42,8 @@ export default function PlatformLoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="relative flex min-h-screen items-center justify-center p-4">
+      <ModeToggle className="absolute right-4 top-4" />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Platform admin</CardTitle>
