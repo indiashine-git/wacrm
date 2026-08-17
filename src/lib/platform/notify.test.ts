@@ -77,8 +77,41 @@ describe("notify", () => {
       expect.objectContaining({
         to: "owner@acme.test",
         text: expect.stringContaining("duplicate signup"),
+        html: expect.stringContaining("duplicate signup"),
       })
     );
+  });
+
+  it("sends branded HTML alongside plain text, with subject set", async () => {
+    vi.stubEnv("NOTIFY_EMAIL_ENABLED", "true");
+    const { notify } = await import("./notify");
+
+    await notify("account_approved", { accountId: "acct-1" });
+
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "owner@acme.test",
+        subject: expect.any(String),
+        html: expect.stringContaining("<!DOCTYPE html>"),
+      })
+    );
+    const call = sendEmail.mock.calls[0][0];
+    expect(call.html).toContain("Acme");
+    expect(call.subject.length).toBeGreaterThan(0);
+  });
+
+  it("HTML-escapes account name and reason to prevent injection into the email body", async () => {
+    vi.stubEnv("NOTIFY_EMAIL_ENABLED", "true");
+    const { notify } = await import("./notify");
+
+    await notify("account_rejected", {
+      accountId: "acct-1",
+      reason: "<script>alert(1)</script>",
+    });
+
+    const call = sendEmail.mock.calls[0][0];
+    expect(call.html).not.toContain("<script>alert(1)</script>");
+    expect(call.html).toContain("&lt;script&gt;");
   });
 
   it("does nothing (no throw) when every channel is disabled", async () => {
