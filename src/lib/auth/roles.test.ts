@@ -10,6 +10,7 @@ import {
   canViewOnly,
   hasMinRole,
   isAccountRole,
+  isAccountStatus,
   roleRank,
 } from "./roles";
 
@@ -126,5 +127,19 @@ describe("capability predicates", () => {
     expect(canTransferOwnership("admin")).toBe(false);
     expect(canTransferOwnership("agent")).toBe(false);
     expect(canTransferOwnership("viewer")).toBe(false);
+  });
+});
+
+describe("isAccountStatus", () => {
+  it("accepts valid statuses", () => {
+    expect(isAccountStatus("pending")).toBe(true);
+    expect(isAccountStatus("approved")).toBe(true);
+    expect(isAccountStatus("rejected")).toBe(true);
+  });
+
+  it("rejects invalid values", () => {
+    expect(isAccountStatus("active")).toBe(false);
+    expect(isAccountStatus(null)).toBe(false);
+    expect(isAccountStatus(42)).toBe(false);
   });
 });

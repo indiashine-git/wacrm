@@ -107,3 +107,26 @@ export function canDeleteAccount(role: AccountRole): boolean {
 export function canTransferOwnership(role: AccountRole): boolean {
   return role === "owner";
 }
+
+// ------------------------------------------------------------
+// Account approval status — separate axis from role. A user can
+// be "owner" of an account that is still "pending" operator
+// approval; role governs in-account permissions, status governs
+// whether the account can use the app at all.
+// ------------------------------------------------------------
+
+export type AccountStatus = "pending" | "approved" | "rejected";
+
+const ACCOUNT_STATUSES: readonly AccountStatus[] = [
+  "pending",
+  "approved",
+  "rejected",
+] as const;
+
+/** Type-narrow an unknown string into a valid `AccountStatus`. */
+export function isAccountStatus(value: unknown): value is AccountStatus {
+  return (
+    typeof value === "string" &&
+    (ACCOUNT_STATUSES as readonly string[]).includes(value)
+  );
+}
