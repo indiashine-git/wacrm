@@ -3,7 +3,11 @@ import { sendTelegram } from "./notify-telegram";
 import { sendWhatsapp } from "./notify-whatsapp";
 import { supabasePlatformAdmin } from "./admin-client";
 
-export type NotifyEvent = "signup_pending" | "account_approved" | "account_rejected";
+export type NotifyEvent =
+  | "signup_pending"
+  | "account_approved"
+  | "account_rejected"
+  | "account_suspended";
 
 export interface NotifyPayload {
   accountId: string;
@@ -30,6 +34,8 @@ function messageFor(event: NotifyEvent, accountName: string, reason?: string): s
       return `Your wacrm account "${accountName}" has been approved. You can now sign in.`;
     case "account_rejected":
       return `Your wacrm account "${accountName}" was not approved.${reason ? ` Reason: ${reason}` : ""}`;
+    case "account_suspended":
+      return `Your wacrm account "${accountName}" has been suspended. Contact support for details.`;
   }
 }
 
@@ -48,7 +54,7 @@ export async function notify(event: NotifyEvent, payload: NotifyPayload): Promis
 
   const text = messageFor(event, account.name, payload.reason);
   const operatorEvents: NotifyEvent[] = ["signup_pending"];
-  const applicantEvents: NotifyEvent[] = ["account_approved", "account_rejected"];
+  const applicantEvents: NotifyEvent[] = ["account_approved", "account_rejected", "account_suspended"];
 
   const tasks: Promise<void>[] = [];
 

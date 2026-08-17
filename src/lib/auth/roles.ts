@@ -115,12 +115,13 @@ export function canTransferOwnership(role: AccountRole): boolean {
 // whether the account can use the app at all.
 // ------------------------------------------------------------
 
-export type AccountStatus = "pending" | "approved" | "rejected";
+export type AccountStatus = "pending" | "approved" | "rejected" | "suspended";
 
 const ACCOUNT_STATUSES: readonly AccountStatus[] = [
   "pending",
   "approved",
   "rejected",
+  "suspended",
 ] as const;
 
 /** Type-narrow an unknown string into a valid `AccountStatus`. */
