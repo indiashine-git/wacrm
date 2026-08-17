@@ -5,10 +5,32 @@ import type { ApiKeyRow } from "@/lib/api-keys/store";
 import { ApiError } from "@/lib/api/v1/respond";
 import { __resetRateLimitForTests, RATE_LIMITS } from "@/lib/rate-limit";
 
-// Mock the service-role client factory — requireApiKey only stashes
-// the returned client in the context; tests never call through it.
+// Account approval status the mocked `accounts` table returns.
+// Defaults to "approved" so every pre-existing test in this file
+// (written before the approval gate existed) keeps passing unmodified.
+let mockAccountStatus: "pending" | "approved" | "rejected" | null = "approved";
+
+// Mock the service-role client factory. requireApiKey now also queries
+// `accounts` through this client for the approval-status gate.
 vi.mock("@/lib/flows/admin-client", () => ({
-  supabaseAdmin: () => ({ __isMockAdminClient: true }),
+  supabaseAdmin: () => ({
+    __isMockAdminClient: true,
+    from: (table: string) => ({
+      select: () => ({
+        eq: () => ({
+          maybeSingle: async () => {
+            if (table === "accounts") {
+              return {
+                data: mockAccountStatus ? { status: mockAccountStatus } : null,
+                error: null,
+              };
+            }
+            return { data: null, error: null };
+          },
+        }),
+      }),
+    }),
+  }),
 }));
 
 // Mock the store so we control which row a hash resolves to.
@@ -47,6 +69,7 @@ beforeEach(() => {
   __resetRateLimitForTests();
   findActiveKeyByHash.mockReset();
   touchLastUsed.mockReset();
+  mockAccountStatus = "approved";
 });
 
 afterEach(() => {
@@ -115,6 +138,26 @@ describe("requireApiKey", () => {
     findActiveKeyByHash.mockResolvedValue(row({ scopes: ["messages:send"] }));
     const ctx = await requireApiKey(reqWith(`Bearer ${KEY}`), "messages:send");
     expect(ctx.accountId).toBe("acct-1");
+  });
+
+  it("403s when the key's account is pending approval", async () => {
+    findActiveKeyByHash.mockResolvedValue(row());
+    mockAccountStatus = "pending";
+    await expectApiError(
+      requireApiKey(reqWith(`Bearer ${KEY}`)),
+      "forbidden",
+      403,
+    );
+  });
+
+  it("403s when the key's account was rejected", async () => {
+    findActiveKeyByHash.mockResolvedValue(row());
+    mockAccountStatus = "rejected";
+    await expectApiError(
+      requireApiKey(reqWith(`Bearer ${KEY}`)),
+      "forbidden",
+      403,
+    );
   });
 
   it("429s once the per-key budget is exhausted", async () => {

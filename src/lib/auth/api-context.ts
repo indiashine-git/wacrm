@@ -94,6 +94,21 @@ export async function requireApiKey(
     throw unauthorized();
   }
 
+  // A key stays valid (unrevoked, unexpired) even if its account is
+  // later paused/rejected by an operator — the key row itself has no
+  // idea. Check the account's approval status directly, same gate
+  // `getCurrentAccount` enforces for the dashboard, so a since-
+  // rejected account's existing API keys stop working too.
+  const admin = supabaseAdmin();
+  const { data: account } = await admin
+    .from('accounts')
+    .select('status')
+    .eq('id', row.account_id)
+    .maybeSingle();
+  if (account && account.status !== 'approved') {
+    throw forbidden('This account is not approved for API access');
+  }
+
   // Rate-limit per key, before the scope check, so an unauthorized-
   // scope caller still can't hammer the endpoint for free.
   const limit = checkRateLimit(`apikey:${row.id}`, RATE_LIMITS.publicApi);
@@ -109,7 +124,7 @@ export async function requireApiKey(
 
   return {
     authType: 'api_key',
-    supabase: supabaseAdmin(),
+    supabase: admin,
     accountId: row.account_id,
     keyId: row.id,
     scopes: row.scopes,
