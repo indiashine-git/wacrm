@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabasePlatformAdmin } from "@/lib/platform/admin-client";
+import { requirePlatformAuth } from "@/lib/platform/require-platform-auth";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authError = requirePlatformAuth(request);
+  if (authError) return authError;
+
   const admin = supabasePlatformAdmin();
 
   const { data: accounts, error } = await admin

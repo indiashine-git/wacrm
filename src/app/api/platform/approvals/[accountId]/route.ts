@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabasePlatformAdmin } from "@/lib/platform/admin-client";
 import { notify } from "@/lib/platform/notify";
+import { requirePlatformAuth } from "@/lib/platform/require-platform-auth";
 
 interface Body {
   action: "approve" | "reject";
@@ -11,9 +12,21 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ accountId: string }> }
 ) {
-  const { accountId } = await params;
-  const body = (await request.json()) as Body;
+  const authError = requirePlatformAuth(request);
+  if (authError) return authError;
 
+  const { accountId } = await params;
+
+  let body: Body;
+  try {
+    body = (await request.json()) as Body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (body.action !== "approve" && body.action !== "reject") {
+    return NextResponse.json({ error: "action must be 'approve' or 'reject'" }, { status: 400 });
+  }
   if (body.action === "reject" && !body.reason?.trim()) {
     return NextResponse.json({ error: "A rejection reason is required" }, { status: 400 });
   }
@@ -21,7 +34,7 @@ export async function POST(
   const admin = supabasePlatformAdmin();
   const update =
     body.action === "approve"
-      ? { status: "approved", approved_at: new Date().toISOString() }
+      ? { status: "approved", approved_at: new Date().toISOString(), rejected_reason: null }
       : { status: "rejected", rejected_reason: body.reason };
 
   const { error } = await admin.from("accounts").update(update).eq("id", accountId);

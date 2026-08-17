@@ -44,13 +44,20 @@ export async function middleware(request: NextRequest) {
 
   // Approval gate — an authenticated user whose account is not yet
   // approved gets sent to /pending-approval for any path. Excluded:
-  // /pending-approval itself (avoid a redirect loop), and /platform
-  // (the operator approval surface, gated separately by nginx Basic
-  // Auth — not by this per-tenant account context at all).
+  // /pending-approval itself (avoid a redirect loop); /platform (the
+  // operator approval surface, gated separately by nginx Basic Auth
+  // — not by this per-tenant account context at all); /join and
+  // /api/invitations (an invited teammate is joining an ALREADY-
+  // approved account — handle_new_user still creates them a fresh
+  // *personal* pending account first, but redeem_invitation moves
+  // them onto the inviter's account. Gating these paths would make
+  // every invite permanently unredeemable).
   if (
     user &&
     request.nextUrl.pathname !== "/pending-approval" &&
-    !request.nextUrl.pathname.startsWith("/platform")
+    !request.nextUrl.pathname.startsWith("/platform") &&
+    !request.nextUrl.pathname.startsWith("/join") &&
+    !request.nextUrl.pathname.startsWith("/api/invitations")
   ) {
     const { data: profile } = await supabase
       .from("profiles")
@@ -59,13 +66,16 @@ export async function middleware(request: NextRequest) {
       .maybeSingle();
 
     if (profile?.account_id) {
-      const { data: account } = await supabase
+      const { data: account, error: accountErr } = await supabase
         .from("accounts")
         .select("status")
         .eq("id", profile.account_id)
         .maybeSingle();
 
-      if (account && account.status !== "approved") {
+      // Fail closed: a query error or a missing/non-approved account
+      // both send the user to /pending-approval rather than letting
+      // an unknown state fall through to full access.
+      if (accountErr || !account || account.status !== "approved") {
         const url = request.nextUrl.clone();
         url.pathname = "/pending-approval";
         url.search = "";

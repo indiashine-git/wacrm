@@ -19,6 +19,7 @@ let refreshedCookies: Array<{
 // this file (written before the approval gate existed) keeps passing
 // through unmodified — only the new tests below override it.
 let mockAccountStatus: "pending" | "approved" | "rejected" | null = "approved";
+let mockAccountError: { message: string } | null = null;
 
 vi.mock("@supabase/ssr", () => ({
   createServerClient: (
@@ -46,8 +47,8 @@ vi.mock("@supabase/ssr", () => ({
             }
             if (table === "accounts") {
               return {
-                data: mockAccountStatus ? { status: mockAccountStatus } : null,
-                error: null,
+                data: mockAccountError ? null : mockAccountStatus ? { status: mockAccountStatus } : null,
+                error: mockAccountError,
               };
             }
             return { data: null, error: null };
@@ -67,6 +68,7 @@ beforeEach(() => {
   mockUser = null;
   refreshedCookies = [];
   mockAccountStatus = "approved";
+  mockAccountError = null;
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -171,6 +173,36 @@ describe("middleware — account approval gate", () => {
     mockAccountStatus = "pending";
 
     const res = await middleware(new NextRequest("https://app.test/pending-approval"));
+
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("fails closed (redirects) when the accounts lookup errors", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountError = { message: "connection reset" };
+
+    const res = await middleware(new NextRequest("https://app.test/dashboard"));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/pending-approval");
+  });
+
+  it("does not redirect a pending account on /join/<token> — invite redemption must stay reachable", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "pending";
+
+    const res = await middleware(new NextRequest("https://app.test/join/abc123"));
+
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("does not redirect a pending account calling /api/invitations/<token>/redeem", async () => {
+    mockUser = { id: "user-1" };
+    mockAccountStatus = "pending";
+
+    const res = await middleware(
+      new NextRequest("https://app.test/api/invitations/abc123/redeem"),
+    );
 
     expect(res.headers.get("location")).toBeNull();
   });

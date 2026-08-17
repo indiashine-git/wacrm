@@ -9,6 +9,7 @@ import { __resetRateLimitForTests, RATE_LIMITS } from "@/lib/rate-limit";
 // Defaults to "approved" so every pre-existing test in this file
 // (written before the approval gate existed) keeps passing unmodified.
 let mockAccountStatus: "pending" | "approved" | "rejected" | null = "approved";
+let mockAccountError: { message: string } | null = null;
 
 // Mock the service-role client factory. requireApiKey now also queries
 // `accounts` through this client for the approval-status gate.
@@ -21,8 +22,8 @@ vi.mock("@/lib/flows/admin-client", () => ({
           maybeSingle: async () => {
             if (table === "accounts") {
               return {
-                data: mockAccountStatus ? { status: mockAccountStatus } : null,
-                error: null,
+                data: mockAccountError ? null : mockAccountStatus ? { status: mockAccountStatus } : null,
+                error: mockAccountError,
               };
             }
             return { data: null, error: null };
@@ -70,6 +71,7 @@ beforeEach(() => {
   findActiveKeyByHash.mockReset();
   touchLastUsed.mockReset();
   mockAccountStatus = "approved";
+  mockAccountError = null;
 });
 
 afterEach(() => {
@@ -157,6 +159,33 @@ describe("requireApiKey", () => {
       requireApiKey(reqWith(`Bearer ${KEY}`)),
       "forbidden",
       403,
+    );
+  });
+
+  it("403s (fails closed) when the account status lookup errors", async () => {
+    findActiveKeyByHash.mockResolvedValue(row());
+    mockAccountError = { message: "connection reset" };
+    await expectApiError(
+      requireApiKey(reqWith(`Bearer ${KEY}`)),
+      "forbidden",
+      403,
+    );
+  });
+
+  it("hits the rate limit before the account-status DB lookup runs", async () => {
+    // Burn the whole window first, with a status that would pass if
+    // reached — then confirm the (N+1)th call 429s without needing
+    // the accounts mock to resolve at all, proving rate limiting
+    // still runs first.
+    findActiveKeyByHash.mockResolvedValue(row());
+    for (let i = 0; i < RATE_LIMITS.publicApi.limit; i++) {
+      await requireApiKey(reqWith(`Bearer ${KEY}`));
+    }
+    mockAccountError = { message: "should never be reached" };
+    await expectApiError(
+      requireApiKey(reqWith(`Bearer ${KEY}`)),
+      "rate_limited",
+      429,
     );
   });
 
