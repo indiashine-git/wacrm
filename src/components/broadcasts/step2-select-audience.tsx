@@ -411,7 +411,7 @@ export function Step2SelectAudience({
                   onClick={() => toggleExcludeTag(tag.id)}
                   className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                     isExcluded
-                      ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                      ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300'
                       : 'border-border bg-muted text-muted-foreground hover:border-border'
                   }`}
                 >

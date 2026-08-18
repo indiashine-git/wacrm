@@ -267,8 +267,8 @@ export function ContactForm({
               <div
                 className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
                   dupMatch.exact
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                    : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                    ? 'border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-300'
+                    : 'border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-300'
                 }`}
               >
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />

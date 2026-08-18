@@ -371,7 +371,7 @@ export default function BroadcastDetailPage() {
             funnel inconsistent. */}
         {confirmDelete ? (
           <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
-            <span className="text-red-300">{t('deletePrompt')}</span>
+            <span className="text-red-600 dark:text-red-300">{t('deletePrompt')}</span>
             <Button
               variant="outline"
               size="sm"

@@ -322,7 +322,7 @@ function SendButtonsForm({
                 variant="ghost"
                 size="sm"
                 onClick={() => removeButton(i)}
-                className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="text-red-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
@@ -497,7 +497,7 @@ function SendListForm({
                   variant="ghost"
                   size="sm"
                   onClick={() => removeSection(sIdx)}
-                  className="shrink-0 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  className="shrink-0 text-red-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
                   aria-label="Remove section"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -551,7 +551,7 @@ function SendListForm({
                   variant="ghost"
                   size="sm"
                   onClick={() => removeRow(sIdx, rIdx)}
-                  className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                  className="text-red-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
@@ -982,7 +982,7 @@ function SendMediaForm({
               href={cfg.media_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="min-w-0 flex-1 truncate text-foreground hover:text-cyan-300"
+              className="min-w-0 flex-1 truncate text-foreground hover:text-cyan-600 dark:hover:text-cyan-300"
               title={displayName || cfg.media_url}
             >
               {displayName || cfg.media_url}

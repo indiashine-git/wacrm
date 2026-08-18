@@ -446,7 +446,7 @@ export function WhatsAppConfig() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="size-5 text-amber-400 mt-0.5 shrink-0" />
               <div className="flex-1">
-                <AlertTitle className="text-amber-200 mb-1">
+                <AlertTitle className="text-amber-700 dark:text-amber-200 mb-1">
                   Stored token can&apos;t be decrypted
                 </AlertTitle>
                 <AlertDescription className="text-amber-100/80 text-sm">
@@ -517,7 +517,7 @@ export function WhatsAppConfig() {
                 )}
                 <AlertTitle
                   className={
-                    'mb-0 ' + (isRegistered ? 'text-emerald-200' : 'text-amber-200')
+                    'mb-0 ' + (isRegistered ? 'text-emerald-700 dark:text-emerald-200' : 'text-amber-700 dark:text-amber-200')
                   }
                 >
                   {isRegistered
@@ -554,7 +554,7 @@ export function WhatsAppConfig() {
               ) : lastRegistrationError ? (
                 <>
                   {t('lastAttemptFailed')}
-                  <span className="text-red-300">
+                  <span className="text-red-600 dark:text-red-300">
                     &quot;{lastRegistrationError}&quot;
                   </span>
                   . {t('retryHint')}
@@ -587,7 +587,7 @@ export function WhatsAppConfig() {
                   ))}
                 </ul>
                 {(registrationProbe.errors ?? []).length > 0 && (
-                  <ul className="pt-1 space-y-0.5 text-red-300">
+                  <ul className="pt-1 space-y-0.5 text-red-600 dark:text-red-300">
                     {registrationProbe.errors?.map((e, i) => (
                       <li key={i}>• {e}</li>
                     ))}
@@ -803,7 +803,7 @@ export function WhatsAppConfig() {
               variant="outline"
               onClick={handleReset}
               disabled={resetting}
-              className="border-red-900 text-red-400 hover:text-red-300 hover:bg-red-950/40"
+              className="border-red-900 text-red-400 hover:text-red-600 dark:hover:text-red-300 hover:bg-red-950/40"
             >
               {resetting ? (
                 <>
