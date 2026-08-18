@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 type AccountStatus = "pending" | "approved" | "rejected" | "suspended";
 
@@ -13,6 +14,7 @@ interface Account {
   status: AccountStatus;
   ownerEmail: string;
   createdAt: string;
+  shareMetaCredit: boolean;
 }
 
 const STATUS_LABEL: Record<AccountStatus, string> = {
@@ -69,6 +71,24 @@ export function AccountsTable() {
     await load();
   }
 
+  async function toggleCreditSharing(id: string, enabled: boolean) {
+    // Optimistic update — flip locally first so the switch feels
+    // instant, then reconcile against the server response.
+    setAccounts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, shareMetaCredit: enabled } : a))
+    );
+    const res = await fetch(`/api/platform/accounts/${id}/credit-sharing`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert(body.error ?? `Failed to update credit sharing (${res.status}).`);
+      await load();
+    }
+  }
+
   if (loading) return <div>Loading…</div>;
   if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (accounts.length === 0) return <p className="text-muted-foreground">No accounts yet.</p>;
@@ -113,6 +133,15 @@ export function AccountsTable() {
             {(account.status === "suspended" || account.status === "rejected") && (
               <Button onClick={() => act(account.id, "reactivate")}>Reactivate</Button>
             )}
+          </CardContent>
+          <CardContent className="flex items-center gap-2 pt-0">
+            <Switch
+              checked={account.shareMetaCredit}
+              onCheckedChange={(checked) => toggleCreditSharing(account.id, checked)}
+            />
+            <span className="text-sm text-muted-foreground">
+              Share platform Meta billing with this tenant (Embedded Signup onboarding)
+            </span>
           </CardContent>
         </Card>
       ))}

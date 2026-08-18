@@ -66,6 +66,83 @@ export async function verifyPhoneNumber(
 }
 
 // ============================================================
+// Embedded Signup
+// ============================================================
+
+export interface ExchangeEmbeddedSignupCodeArgs {
+  code: string
+}
+
+/**
+ * Exchange the authorization code returned by Embedded Signup's
+ * postMessage event for a Business Integration System User access
+ * token. Per Meta's docs this token is long-lived by construction —
+ * no separate long-lived-token exchange step is needed (unlike a
+ * normal user-login OAuth code).
+ */
+export async function exchangeEmbeddedSignupCode(
+  args: ExchangeEmbeddedSignupCodeArgs
+): Promise<{ accessToken: string }> {
+  const { code } = args
+  const appId = process.env.META_APP_ID
+  const appSecret = process.env.META_APP_SECRET
+  if (!appId || !appSecret) {
+    throw new Error('META_APP_ID / META_APP_SECRET not configured on the server.')
+  }
+  const url = new URL(`${META_API_BASE}/oauth/access_token`)
+  url.searchParams.set('client_id', appId)
+  url.searchParams.set('client_secret', appSecret)
+  url.searchParams.set('code', code)
+  const response = await fetch(url.toString())
+  if (!response.ok) {
+    await throwMetaError(response, `Meta token exchange failed: ${response.status}`)
+  }
+  const data = (await response.json()) as { access_token?: string }
+  if (!data.access_token) {
+    throw new Error('Meta token exchange returned no access_token.')
+  }
+  return { accessToken: data.access_token }
+}
+
+export interface AssertWabaOwnsPhoneNumberArgs {
+  wabaId: string
+  phoneNumberId: string
+  accessToken: string
+}
+
+/**
+ * Independently confirm the given phone number actually belongs to
+ * the given WABA under this access token, rather than trusting a
+ * client-supplied (wabaId, phoneNumberId) pair at face value. A
+ * manipulated client request could otherwise pair a valid code/token
+ * with someone else's WABA/phone id and get it written to the wrong
+ * tenant's row. Throws if the token can't list the WABA's numbers,
+ * or the given phoneNumberId isn't among them.
+ */
+export async function assertWabaOwnsPhoneNumber(
+  args: AssertWabaOwnsPhoneNumberArgs
+): Promise<void> {
+  const { wabaId, phoneNumberId, accessToken } = args
+  const url = `${META_API_BASE}/${wabaId}/phone_numbers?fields=id`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(
+      response,
+      'This token does not have access to the given WhatsApp Business Account.'
+    )
+  }
+  const data = (await response.json()) as { data?: { id: string }[] }
+  const owns = (data.data ?? []).some((n) => n.id === phoneNumberId)
+  if (!owns) {
+    throw new Error(
+      'The given phone number does not belong to the given WhatsApp Business Account.'
+    )
+  }
+}
+
+// ============================================================
 // Cloud API registration (subscription for inbound webhooks)
 // ============================================================
 //

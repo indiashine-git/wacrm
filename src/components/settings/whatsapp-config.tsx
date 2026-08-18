@@ -24,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Switch } from '@/components/ui/switch';
 import { SettingsPanelHead } from './settings-panel-head';
+import { ConnectWhatsAppButton } from './connect-whatsapp-button';
 import {
   Accordion,
   AccordionItem,
@@ -598,7 +599,30 @@ export function WhatsAppConfig() {
           </Alert>
         )}
 
-        {/* API Credentials */}
+        {/* Connect via Meta — primary path. Manual entry below stays
+            as the "bring your own Meta app" fallback (also what got
+            our own number registered, since a fresh number sometimes
+            needs the raw register/PIN flow this form drives). */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-foreground">Connect WhatsApp</CardTitle>
+            <CardDescription className="text-muted-foreground">
+              Connect an existing WhatsApp Business number through Meta — no manual IDs or tokens needed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ConnectWhatsAppButton
+              onConnected={({ pin }) => {
+                toast.success(`Two-step verification PIN: ${pin} — save this, it won't be shown again.`, {
+                  duration: 15000,
+                });
+                if (accountId) fetchConfig(accountId);
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {/* API Credentials — manual / advanced fallback */}
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">{t('apiCredentialsTitle')}</CardTitle>

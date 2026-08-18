@@ -10,7 +10,7 @@ export async function GET(request: Request) {
 
   const { data: accounts, error } = await admin
     .from("accounts")
-    .select("id, name, status, created_at, owner_user_id")
+    .select("id, name, status, created_at, owner_user_id, share_meta_credit")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -27,6 +27,7 @@ export async function GET(request: Request) {
         status: account.status,
         ownerEmail: data.user?.email ?? "(unknown)",
         createdAt: account.created_at,
+        shareMetaCredit: account.share_meta_credit ?? false,
       };
     })
   );
