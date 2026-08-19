@@ -20,6 +20,7 @@ import {
   Phone,
   Copy,
   Reply,
+  Languages,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -155,6 +156,10 @@ export function TemplateManager() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sort, setSort] = useState<'newest' | 'oldest' | 'name'>('newest');
+  // Non-null only while the dialog is pre-filled from
+  // openDuplicateForLanguage — locks the name field so the new
+  // translation's name can't drift from the original.
+  const [duplicateSourceName, setDuplicateSourceName] = useState<string | null>(null);
   // Non-null when the dialog is editing an existing row — switches the
   // submit handler from POST /submit to PATCH /[id] and changes the
   // dialog title + CTA. Set to the template id to pre-fill from a row.
@@ -280,6 +285,7 @@ export function TemplateManager() {
 
   function openEdit(template: MessageTemplate) {
     setEditingId(template.id);
+    setDuplicateSourceName(null);
     setForm({
       name: template.name,
       category: template.category,
@@ -298,7 +304,37 @@ export function TemplateManager() {
 
   function openCreate() {
     setEditingId(null);
+    setDuplicateSourceName(null);
     setForm(emptyForm);
+    setDialogOpen(true);
+  }
+
+  /**
+   * "Translate to another language" — Meta doesn't have a single
+   * multi-language template; each language is its own template
+   * resource that must share the same `name` to be grouped as
+   * translations of one another. This pre-fills a brand-new template
+   * (POST, not PATCH — editingId stays null) from an existing one so
+   * the user only has to translate the text and pick a language,
+   * instead of retyping the whole structure. The name is locked so it
+   * can't drift from the original and break the Meta grouping.
+   */
+  function openDuplicateForLanguage(template: MessageTemplate) {
+    setEditingId(null);
+    setDuplicateSourceName(template.name);
+    setForm({
+      name: template.name,
+      category: template.category,
+      language: '',
+      header_format: (template.header_type ?? 'none') as HeaderFormat,
+      header_content: template.header_content ?? '',
+      header_media_url: template.header_media_url ?? '',
+      header_sample: '',
+      body_text: template.body_text,
+      body_samples: [],
+      footer_text: template.footer_text ?? '',
+      buttons: template.buttons ?? [],
+    });
     setDialogOpen(true);
   }
 
@@ -716,6 +752,19 @@ export function TemplateManager() {
                         {t('resubmit')}
                       </Button>
                     )}
+                    {statusKey === 'APPROVED' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openDuplicateForLanguage(template)}
+                        title={t('translateTitle')}
+                        aria-label={t('translateLabel')}
+                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
+                      >
+                        <Languages className="size-3.5" />
+                        {t('translate')}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -755,6 +804,7 @@ export function TemplateManager() {
           setDialogOpen(open);
           if (!open) {
             setEditingId(null);
+            setDuplicateSourceName(null);
             setForm(emptyForm);
           }
         }}
@@ -762,12 +812,18 @@ export function TemplateManager() {
         <DialogContent className="bg-popover border-border sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">
-              {editingId ? t('dialogEditTitle') : t('dialogNewTitle')}
+              {editingId
+                ? t('dialogEditTitle')
+                : duplicateSourceName
+                  ? t('dialogTranslateTitle')
+                  : t('dialogNewTitle')}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {editingId
                 ? t('dialogEditDesc')
-                : t('dialogNewDesc')}
+                : duplicateSourceName
+                  ? t('dialogTranslateDesc', { name: duplicateSourceName })
+                  : t('dialogNewDesc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -785,13 +841,15 @@ export function TemplateManager() {
                 placeholder={t('namePlaceholder')}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                disabled={editingId !== null}
+                disabled={editingId !== null || duplicateSourceName !== null}
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <p className="text-[11px] text-muted-foreground">
                 {editingId
                   ? t('nameFixed')
-                  : t('nameHint')}
+                  : duplicateSourceName
+                    ? t('nameFixedTranslate')
+                    : t('nameHint')}
               </p>
             </div>
 

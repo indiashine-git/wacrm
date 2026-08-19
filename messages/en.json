@@ -1406,16 +1406,22 @@
       "deleteLocallyAria": "Delete template locally",
       "deleteMetaLocallyTitle": "Delete from Meta and locally",
       "deleteLocallyTitle": "Delete locally",
-      
+      "translateTitle": "Translate this template into another language — Meta approves each language separately.",
+      "translateLabel": "Translate template to another language",
+      "translate": "Translate",
+
       "dialogEditTitle": "Edit Message Template",
       "dialogNewTitle": "New Message Template",
+      "dialogTranslateTitle": "Translate Template",
       "dialogEditDesc": "Save your changes to re-submit to Meta. Status will flip back to PENDING during review.",
       "dialogNewDesc": "Build a template and submit it to Meta for approval. Once approved, you can use it in broadcasts and the inbox.",
+      "dialogTranslateDesc": "Pre-filled from \"{name}\". Translate the text below, pick the new language, and submit — Meta approves each language as its own template, grouped by this shared name.",
       "authWarning": "AUTHENTICATION templates have a fixed body + OTP button shape that needs a different builder. Create them in Meta WhatsApp Manager for now and use <bold>Sync from Meta</bold> to bring them in.",
-      
+
       "templateName": "Template Name",
       "namePlaceholder": "e.g. order_confirmation",
       "nameFixed": "Name is fixed once a template exists on Meta — create a new template to change it.",
+      "nameFixedTranslate": "Must match the original template's name so Meta groups this as a translation of it.",
       "nameHint": "Lowercase letters, digits, and underscores only.",
       "category": "Category",
       "language": "Language",
