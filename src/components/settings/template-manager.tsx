@@ -147,6 +147,10 @@ export function TemplateManager() {
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [form, setForm] = useState<TemplateFormData>(emptyForm);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'name'>('newest');
   // Non-null when the dialog is editing an existing row — switches the
   // submit handler from POST /submit to PATCH /[id] and changes the
   // dialog title + CTA. Set to the template id to pre-fill from a row.
@@ -177,6 +181,31 @@ export function TemplateManager() {
         : 0,
     [form.header_format, form.header_content],
   );
+
+  const templateCategories = useMemo(
+    () => Array.from(new Set(templates.map((tpl) => tpl.category))).sort(),
+    [templates],
+  );
+
+  const visibleTemplates = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let list = templates.filter((tpl) => {
+      if (categoryFilter !== 'all' && tpl.category !== categoryFilter) return false;
+      if (statusFilter !== 'all' && (tpl.status || 'DRAFT') !== statusFilter) return false;
+      if (!query) return true;
+      return (
+        tpl.name.toLowerCase().includes(query) ||
+        (tpl.body_text ?? '').toLowerCase().includes(query)
+      );
+    });
+    list = [...list].sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name);
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return sort === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+    return list;
+  }, [templates, search, categoryFilter, statusFilter, sort]);
 
   // Resize body_samples so it always has exactly bodyVarCount entries.
   // (We mutate via setForm in an effect so React owns the state.)
@@ -527,8 +556,71 @@ export function TemplateManager() {
           </CardContent>
         </Card>
       ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="h-9 min-w-[180px] flex-1 border-border bg-muted text-sm text-foreground placeholder:text-muted-foreground"
+            />
+            <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v || 'all')}>
+              <SelectTrigger className="h-9 w-36 border-border bg-muted text-sm text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover">
+                <SelectItem value="all" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('allCategories')}
+                </SelectItem>
+                {templateCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v || 'all')}>
+              <SelectTrigger className="h-9 w-36 border-border bg-muted text-sm text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover">
+                <SelectItem value="all" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('allStatuses')}
+                </SelectItem>
+                {Object.entries(templateStatusConfig).map(([key, cfg]) => (
+                  <SelectItem key={key} value={key} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                    {cfg.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sort} onValueChange={(v) => setSort((v || 'newest') as typeof sort)}>
+              <SelectTrigger className="h-9 w-36 border-border bg-muted text-sm text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover">
+                <SelectItem value="newest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('sortNewest')}
+                </SelectItem>
+                <SelectItem value="oldest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('sortOldest')}
+                </SelectItem>
+                <SelectItem value="name" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('sortName')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {visibleTemplates.length === 0 ? (
+            <Card>
+              <CardContent className="flex items-center justify-center py-8 text-center">
+                <p className="text-muted-foreground text-sm">{t('noMatches')}</p>
+              </CardContent>
+            </Card>
+          ) : (
         <div className="grid gap-3 xl:grid-cols-2">
-          {templates.map((template) => {
+          {visibleTemplates.map((template) => {
             const statusKey = template.status || 'DRAFT';
             const status = templateStatusConfig[statusKey];
             return (
@@ -638,6 +730,8 @@ export function TemplateManager() {
             );
           })}
         </div>
+          )}
+        </>
       )}
 
       <Dialog

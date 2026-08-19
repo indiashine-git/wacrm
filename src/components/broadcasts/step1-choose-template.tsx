@@ -1,11 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Loader2, FileText, ArrowRight } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Loader2, FileText, ArrowRight, Search } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+
+type SortOption = 'newest' | 'oldest' | 'name';
 
 const categoryColors: Record<string, string> = {
   Marketing: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
@@ -25,6 +35,9 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [sort, setSort] = useState<SortOption>('newest');
 
   useEffect(() => {
     async function fetchTemplates() {
@@ -50,6 +63,30 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
 
     fetchTemplates();
   }, []);
+
+  const categories = useMemo(
+    () => Array.from(new Set(templates.map((t) => t.category))).sort(),
+    [templates],
+  );
+
+  const visibleTemplates = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let list = templates.filter((tpl) => {
+      if (categoryFilter !== 'all' && tpl.category !== categoryFilter) return false;
+      if (!query) return true;
+      return (
+        tpl.name.toLowerCase().includes(query) ||
+        (tpl.body_text ?? '').toLowerCase().includes(query)
+      );
+    });
+    list = [...list].sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name);
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return sort === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+    return list;
+  }, [templates, search, categoryFilter, sort]);
 
   if (loading) {
     return (
@@ -83,8 +120,57 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
           <p className="mt-1 text-xs text-muted-foreground">{t('chooseTemplate.createFirst')}</p>
         </div>
       ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[180px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t('chooseTemplate.searchPlaceholder')}
+                className="h-9 border-border bg-muted pl-8 text-sm text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+            <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v || 'all')}>
+              <SelectTrigger className="h-9 w-36 border-border bg-muted text-sm text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover">
+                <SelectItem value="all" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('chooseTemplate.allCategories')}
+                </SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat} value={cat} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                    {cat}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sort} onValueChange={(v) => setSort((v || 'newest') as SortOption)}>
+              <SelectTrigger className="h-9 w-36 border-border bg-muted text-sm text-foreground">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-border bg-popover">
+                <SelectItem value="newest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('chooseTemplate.sortNewest')}
+                </SelectItem>
+                <SelectItem value="oldest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('chooseTemplate.sortOldest')}
+                </SelectItem>
+                <SelectItem value="name" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {t('chooseTemplate.sortName')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {visibleTemplates.length === 0 ? (
+            <div className="flex h-32 items-center justify-center rounded-xl border border-border bg-card/50">
+              <p className="text-sm text-muted-foreground">{t('chooseTemplate.noMatches')}</p>
+            </div>
+          ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {templates.map((template) => {
+          {visibleTemplates.map((template) => {
             const isSelected = selectedTemplate?.id === template.id;
             const catColor = categoryColors[template.category] ?? categoryColors.Utility;
 
@@ -117,6 +203,8 @@ export function Step1ChooseTemplate({ selectedTemplate, onSelect, onNext, onBack
             );
           })}
         </div>
+          )}
+        </>
       )}
 
       <div className="flex items-center justify-between border-t border-border pt-4">

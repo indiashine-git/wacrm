@@ -739,7 +739,13 @@
         "subtitle": "Select an approved message template for your broadcast.",
         "noTemplates": "No templates available.",
         "createFirst": "Create a template in Settings first.",
-        "errorLoad": "Failed to load templates"
+        "errorLoad": "Failed to load templates",
+        "searchPlaceholder": "Search templates…",
+        "allCategories": "All categories",
+        "sortNewest": "Newest first",
+        "sortOldest": "Oldest first",
+        "sortName": "Name (A–Z)",
+        "noMatches": "No templates match your filters."
       },
       "selectAudience": {
         "title": "Select Audience",
@@ -1446,6 +1452,13 @@
       "preview": "Preview",
       "previewBodyPlaceholder": "Your message body will appear here",
       "previewButtonPlaceholder": "Button",
+      "searchPlaceholder": "Search templates…",
+      "allCategories": "All categories",
+      "allStatuses": "All statuses",
+      "sortNewest": "Newest first",
+      "sortOldest": "Oldest first",
+      "sortName": "Name (A–Z)",
+      "noMatches": "No templates match your filters.",
 
       "buttons": "Buttons (optional)",
       "addButton": "Add Button",
