@@ -102,9 +102,24 @@ function FunnelChart({ steps }: { steps: FunnelStep[] }) {
                   className={`h-7 rounded-full ${step.color} transition-[width] duration-500`}
                   style={{ width: `${pctOfMax}%` }}
                 />
+                {/* Text rendered twice, stacked: the bottom layer uses
+                    theme-foreground colors for the part of the label
+                    sitting on the plain track, the top layer is clipped
+                    to the colored bar's width and forced to white so it
+                    stays legible against any of the saturated bar
+                    colors regardless of theme. */}
                 <span className="absolute inset-0 flex items-center px-3 text-xs font-medium text-foreground">
                   {step.value.toLocaleString()}
                   <span className="ml-2 text-muted-foreground/80">
+                    ({pctOfSent}%)
+                  </span>
+                </span>
+                <span
+                  className="absolute inset-y-0 left-0 flex items-center overflow-hidden whitespace-nowrap px-3 text-xs font-medium text-white"
+                  style={{ width: `${pctOfMax}%` }}
+                >
+                  {step.value.toLocaleString()}
+                  <span className="ml-2 text-white/80">
                     ({pctOfSent}%)
                   </span>
                 </span>
