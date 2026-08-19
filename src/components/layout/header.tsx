@@ -58,7 +58,6 @@ export function Header() {
             dashboard-shell.tsx). Sidebar itself still renders that
             drawer on lg:hidden screens, this was just the header's
             own trigger for it. */}
-        </button>
         <h1 className="truncate text-base font-semibold text-foreground sm:text-lg">
           {t(titleKey as string)}
         </h1>
