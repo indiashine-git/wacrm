@@ -119,9 +119,13 @@ export async function middleware(request: NextRequest) {
     return withRefreshedCookies(NextResponse.redirect(url))
   }
 
-  // API routes that need auth (not webhooks)
+  // API routes that need auth (not webhooks, not the broadcast
+  // schedule cron — that one is hit by an external pinger with no
+  // Supabase session, gated instead by its own x-cron-secret check,
+  // same shape as /api/automations/cron).
   if (!user && request.nextUrl.pathname.startsWith('/api/whatsapp/') &&
-      !request.nextUrl.pathname.includes('/webhook')) {
+      !request.nextUrl.pathname.includes('/webhook') &&
+      request.nextUrl.pathname !== '/api/whatsapp/broadcast/cron') {
     return withRefreshedCookies(
       NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     )
