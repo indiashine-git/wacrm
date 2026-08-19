@@ -239,22 +239,15 @@ export function MessageBubble({
     >
       <div
         className={cn(
-          // Real WhatsApp tail: a squared-off top corner (nearest the
-          // margin — outbound top-right, inbound top-left) PLUS an
-          // actual small triangle protruding from it, built with the
-          // CSS border-triangle trick via Tailwind's before: variant.
-          // Tailwind's preflight forces box-sizing:border-box on every
-          // element INCLUDING ::before — that breaks the classic
-          // triangle trick, which needs width:0/height:0 with only
-          // border creating the shape (border-box treats a 0px box
-          // with 7px borders as contradictory and collapses it, so no
-          // triangle rendered at all). before:box-content restores
-          // content-box just for this pseudo-element so the trick
-          // actually works.
-          "relative rounded-2xl px-3 pb-1.5 pt-2 before:absolute before:top-0 before:box-content before:h-0 before:w-0 before:content-['']",
+          // Plain rounded bubble, no tail. The CSS-triangle attempt
+          // didn't read as a real WhatsApp tail and isn't worth the
+          // fragility (it already caused one real bug via Tailwind's
+          // box-sizing preflight) — clean rounded corners on both
+          // sides is the safer, better-looking default.
+          "relative rounded-2xl px-3 pb-1.5 pt-2",
           isAgent
-            ? "rounded-tr-md bg-primary text-primary-foreground before:-right-[6px] before:border-t-[7px] before:border-r-[7px] before:border-t-primary before:border-r-transparent"
-            : "rounded-tl-md bg-muted text-foreground before:-left-[6px] before:border-t-[7px] before:border-l-[7px] before:border-t-muted before:border-l-transparent",
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-foreground",
         )}
       >
         {reply && (
