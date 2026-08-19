@@ -505,16 +505,16 @@ export function WhatsAppConfig() {
           <Alert
             className={
               isRegistered
-                ? 'bg-emerald-950/30 border-emerald-700/50'
-                : 'bg-amber-950/30 border-amber-700/50'
+                ? 'bg-emerald-100/60 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-700/50'
+                : 'bg-amber-100/60 border-amber-300 dark:bg-amber-950/30 dark:border-amber-700/50'
             }
           >
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <div className="flex items-center gap-2">
                 {isRegistered ? (
-                  <CheckCircle2 className="size-4 text-emerald-400" />
+                  <CheckCircle2 className="size-4 text-emerald-700 dark:text-emerald-400" />
                 ) : (
-                  <AlertTriangle className="size-4 text-amber-400" />
+                  <AlertTriangle className="size-4 text-amber-700 dark:text-amber-400" />
                 )}
                 <AlertTitle
                   className={

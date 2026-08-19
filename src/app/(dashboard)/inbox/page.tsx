@@ -425,6 +425,27 @@ function InboxPageInner() {
   }, []);
 
   /**
+   * Safety-net poll, independent of both the reconnect-detection and
+   * visibility paths above. Supabase Realtime's WS can go stale without
+   * ever firing CLOSED/CHANNEL_ERROR — the client-side `isConnected`
+   * flag stays true, and a tab that's open and focused the whole time
+   * never fires `visibilitychange`, so neither existing resync path
+   * triggers. That combination let inbound messages sit invisible for
+   * minutes on an actively-watched tab (#312) until the user manually
+   * refreshed or navigated away and back. A plain 20s poll bounds the
+   * worst case regardless of WS health — cheap (children dedupe) and
+   * simple, versus reimplementing Realtime's own reconnect logic.
+   */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        setResyncToken((n) => n + 1);
+      }
+    }, 20_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  /**
    * Manual refresh trigger for the thread-header refresh button.
    * Bumps the same resyncToken the reconnect / visibility paths use,
    * so it goes through the existing dedupe & refetch plumbing — no
