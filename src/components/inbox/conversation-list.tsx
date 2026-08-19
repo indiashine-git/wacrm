@@ -395,8 +395,16 @@ export function ConversationList({
           min-height:auto, so without it this ScrollArea grows to fit
           every conversation instead of shrinking to the remaining
           space — the list then overflows and gets clipped by the
-          parent's overflow-hidden with no scrollbar (issue #229). */}
-      <ScrollArea className="min-h-0 flex-1">
+          parent's overflow-hidden with no scrollbar (issue #229).
+          `min-w-0` on both the ScrollArea and the row wrapper is the
+          same fix on the horizontal axis: the base-ui ScrollArea's
+          internal viewport doesn't clamp width to its container by
+          default, so on a narrow phone the rows can grow to their
+          content's natural width instead of the screen's — the outer
+          overflow-hidden then hard-clips them with no ellipsis and no
+          visible timestamp (it's positioned past the clip line, not
+          just visually truncated). */}
+      <ScrollArea className="min-h-0 min-w-0 flex-1">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -406,7 +414,7 @@ export function ConversationList({
             <p className="text-sm text-muted-foreground">{t("noConversations")}</p>
           </div>
         ) : (
-          <div className="flex flex-col">
+          <div className="flex w-full min-w-0 flex-col">
             {filtered.map((conv) => (
               <ConversationItem
                 key={conv.id}

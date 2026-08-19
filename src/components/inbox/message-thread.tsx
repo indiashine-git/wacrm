@@ -1080,7 +1080,14 @@ export function MessageThread({
       </div>
 
       {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+      {/* overflow-x-hidden: `overflow-y-auto` alone leaves the x-axis
+          at its default `visible`, so anything overflowing sideways
+          (a bubble's tail pseudo-element sitting a few px outside its
+          box, an unbroken long URL, a wide media element) makes the
+          whole thread horizontally scrollable on a phone — which then
+          shows as a bubble with its left portion scrolled out of
+          view, not an actual sizing bug in the bubble itself. */}
+      <div ref={scrollRef} className="flex-1 overflow-x-hidden overflow-y-auto px-4 py-4">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />

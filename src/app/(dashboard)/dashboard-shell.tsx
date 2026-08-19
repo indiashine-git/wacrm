@@ -36,16 +36,45 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   }, [user, loading, router]);
 
   // Registers the no-op service worker (public/sw.js) so the app
-  // meets Chrome's PWA install criteria. Deliberately a pure
-  // passthrough — see that file for why it must never cache anything
-  // here.
+  // meets Chrome's PWA install criteria and so notifications work on
+  // Android (see notification-prefs.ts). Deliberately a pure
+  // passthrough — see that file for why it must never cache anything.
+  //
+  // Also forces new deploys to actually reach installed PWAs: browsers
+  // only lazily re-check a registered SW's script for changes (up to
+  // ~24h by spec), and Android's standalone-app mode can keep an old
+  // JS bundle running in memory across "reopens" that aren't a true
+  // fresh process start. Several fixes in this app shipped correctly
+  // but weren't visible until a manual "clear app storage" — this
+  // makes that unnecessary going forward: call update() on every
+  // mount/focus to force an immediate byte-check, and reload once when
+  // a new worker actually takes control (self.skipWaiting() in sw.js
+  // means it takes over right away rather than waiting for every tab
+  // to close first).
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
+
+    navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => {
+        registration.update().catch(() => {});
+        const onFocus = () => registration.update().catch(() => {});
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") onFocus();
+        });
+      })
+      .catch(() => {
         // Best-effort — a failed SW registration shouldn't break the app,
-        // it only means the install prompt may not appear.
+        // it only means the install prompt/notifications may not work.
       });
-    }
   }, []);
 
   // Unlock the WebAudio context on the first real click/keydown
