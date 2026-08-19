@@ -38,6 +38,11 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "WATU",
+  },
 };
 
 export const viewport: Viewport = {

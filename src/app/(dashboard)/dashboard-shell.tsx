@@ -34,6 +34,19 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  // Registers the no-op service worker (public/sw.js) so the app
+  // meets Chrome's PWA install criteria. Deliberately a pure
+  // passthrough — see that file for why it must never cache anything
+  // here.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {
+        // Best-effort — a failed SW registration shouldn't break the app,
+        // it only means the install prompt may not appear.
+      });
+    }
+  }, []);
+
   // Unlock the WebAudio context on the first real click/keydown
   // anywhere in the dashboard — browsers refuse to run audio started
   // outside a user gesture, and a WebSocket-triggered notification
