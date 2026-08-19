@@ -243,9 +243,15 @@ export function MessageBubble({
           // margin — outbound top-right, inbound top-left) PLUS an
           // actual small triangle protruding from it, built with the
           // CSS border-triangle trick via Tailwind's before: variant.
-          // A border-radius tweak alone (the previous attempt) doesn't
-          // read as a "tail" — it needs a real point.
-          "relative rounded-2xl px-3 pb-1.5 pt-2 before:absolute before:top-0 before:h-0 before:w-0 before:content-['']",
+          // Tailwind's preflight forces box-sizing:border-box on every
+          // element INCLUDING ::before — that breaks the classic
+          // triangle trick, which needs width:0/height:0 with only
+          // border creating the shape (border-box treats a 0px box
+          // with 7px borders as contradictory and collapses it, so no
+          // triangle rendered at all). before:box-content restores
+          // content-box just for this pseudo-element so the trick
+          // actually works.
+          "relative rounded-2xl px-3 pb-1.5 pt-2 before:absolute before:top-0 before:box-content before:h-0 before:w-0 before:content-['']",
           isAgent
             ? "rounded-tr-md bg-primary text-primary-foreground before:-right-[6px] before:border-t-[7px] before:border-r-[7px] before:border-t-primary before:border-r-transparent"
             : "rounded-tl-md bg-muted text-foreground before:-left-[6px] before:border-t-[7px] before:border-l-[7px] before:border-t-muted before:border-l-transparent",

@@ -649,37 +649,37 @@ export function MessageComposer({
                   message-composition, AI — instead of one undifferentiated
                   list, and every label forced to one line (menu is wide
                   enough that nothing needs to wrap). */}
-              <DropdownMenuItem onClick={() => imageInputRef.current?.click()} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <ImageIcon className="mr-2 h-4 w-4 shrink-0" />
                 {t("photo")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <Video className="mr-2 h-4 w-4 shrink-0" />
                 {t("video")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => documentInputRef.current?.click()} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => documentInputRef.current?.click()} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <FileText className="mr-2 h-4 w-4 shrink-0" />
                 {t("document")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void startRecording()} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => void startRecording()} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <Mic className="mr-2 h-4 w-4 shrink-0" />
                 {t("voiceNote")}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem onClick={() => openInteractiveBuilder()} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => openInteractiveBuilder()} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <MessageSquareDashed className="mr-2 h-4 w-4 shrink-0" />
                 {t("interactiveMessage")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setQuickReplyOpen(true)} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={() => setQuickReplyOpen(true)} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <Zap className="mr-2 h-4 w-4 shrink-0" />
                 {t("quickReplies")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenTemplates} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={onOpenTemplates} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 <LayoutTemplate className="mr-2 h-4 w-4 shrink-0" />
                 {t("sendTemplate")}
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border" />
-              <DropdownMenuItem onClick={handleDraft} disabled={drafting} className="whitespace-nowrap">
+              <DropdownMenuItem onClick={handleDraft} disabled={drafting} className="mb-1 whitespace-nowrap py-2.5 last:mb-0">
                 {drafting ? (
                   <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
                 ) : (
