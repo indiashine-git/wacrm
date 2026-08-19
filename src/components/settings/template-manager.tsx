@@ -16,6 +16,10 @@ import {
   Image as ImageIcon,
   Video,
   File as FileIcon,
+  ExternalLink,
+  Phone,
+  Copy,
+  Reply,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -1046,63 +1050,80 @@ export function TemplateManager() {
               />
             </div>
 
-            {/* Live preview — same WhatsApp-bubble mock used in the
-                broadcast wizard, kept in sync with every field above so
-                the user sees approximately what the recipient will see
-                before submitting for Meta approval. */}
+            {/* Live preview — same card styling as the quick-replies /
+                interactive-message preview (InteractivePreview):
+                theme-token colors so it works in both themes, buttons
+                attached to the bottom with a hairline separator and a
+                type-matched icon, exactly like Meta's own template
+                preview in Business Manager (a plain card, not a phone
+                mock). Kept in sync with every field above. */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Eye className="size-4 text-primary" />
                 <Label className="text-muted-foreground">{t('preview')}</Label>
               </div>
-              <div className="mx-auto max-w-[280px] rounded-[2rem] border-4 border-neutral-800 bg-neutral-800 p-1.5 shadow-lg">
-                <div className="rounded-[1.5rem] bg-[#0e1a12] p-3">
-                  <div className="max-w-[90%] space-y-1 rounded-lg bg-[#d9fdd3] px-3 py-2 shadow-sm">
-                    {form.header_format === 'text' && form.header_content && (
-                      <p className="text-sm font-semibold text-[#111b21]">
-                        {renderWithSamples(
-                          form.header_content,
-                          form.header_sample ? [form.header_sample] : [],
-                        )}
-                      </p>
-                    )}
-                    {form.header_format === 'image' && (
-                      <div className="flex h-28 items-center justify-center rounded-md bg-black/10 text-[#111b21]/60">
-                        <ImageIcon className="size-8" />
-                      </div>
-                    )}
-                    {form.header_format === 'video' && (
-                      <div className="flex h-28 items-center justify-center rounded-md bg-black/10 text-[#111b21]/60">
-                        <Video className="size-8" />
-                      </div>
-                    )}
-                    {form.header_format === 'document' && (
-                      <div className="flex items-center gap-2 rounded-md bg-black/10 px-2 py-3 text-[#111b21]/60">
-                        <FileIcon className="size-5" />
-                        <span className="text-xs">Document</span>
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap text-sm text-[#111b21]">
-                      {renderWithSamples(form.body_text, form.body_samples) ||
-                        t('previewBodyPlaceholder')}
+              <div className="w-full max-w-[280px] overflow-hidden rounded-lg bg-card text-foreground shadow-sm ring-1 ring-border">
+                <div className="space-y-1 px-3 py-2">
+                  {form.header_format === 'text' && form.header_content && (
+                    <p className="break-words text-sm font-semibold">
+                      {renderWithSamples(
+                        form.header_content,
+                        form.header_sample ? [form.header_sample] : [],
+                      )}
                     </p>
-                    {form.footer_text && (
-                      <p className="text-xs text-[#111b21]/60">{form.footer_text}</p>
-                    )}
-                  </div>
-                  {form.buttons.length > 0 && (
-                    <div className="mt-1.5 max-w-[90%] space-y-1">
-                      {form.buttons.map((btn, i) => (
-                        <div
-                          key={i}
-                          className="rounded-lg bg-[#1f2c34] py-2 text-center text-xs font-medium text-[#00a5f4]"
-                        >
-                          {btn.text || t('previewButtonPlaceholder')}
-                        </div>
-                      ))}
+                  )}
+                  {form.header_format === 'image' && (
+                    <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <ImageIcon className="size-8" />
                     </div>
                   )}
+                  {form.header_format === 'video' && (
+                    <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <Video className="size-8" />
+                    </div>
+                  )}
+                  {form.header_format === 'document' && (
+                    <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-3 text-muted-foreground">
+                      <FileIcon className="size-5" />
+                      <span className="text-xs">Document</span>
+                    </div>
+                  )}
+                  <p className="whitespace-pre-wrap break-words text-sm">
+                    {renderWithSamples(form.body_text, form.body_samples) || (
+                      <span className="text-muted-foreground">{t('previewBodyPlaceholder')}</span>
+                    )}
+                  </p>
+                  {form.footer_text && (
+                    <p className="break-words text-[11px] text-muted-foreground">{form.footer_text}</p>
+                  )}
                 </div>
+                {form.buttons.length > 0 && (
+                  <div className="flex flex-col border-t border-border">
+                    {form.buttons.map((btn, i) => {
+                      const ButtonIcon =
+                        btn.type === 'URL'
+                          ? ExternalLink
+                          : btn.type === 'PHONE_NUMBER'
+                            ? Phone
+                            : btn.type === 'COPY_CODE'
+                              ? Copy
+                              : Reply;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          disabled
+                          className="flex items-center justify-center gap-1.5 border-t border-border py-2 text-sm font-medium text-primary first:border-t-0"
+                        >
+                          <ButtonIcon className="h-3.5 w-3.5" />
+                          <span className="truncate">
+                            {btn.text || t('previewButtonPlaceholder')}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
