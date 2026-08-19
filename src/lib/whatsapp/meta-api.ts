@@ -12,6 +12,14 @@
 const META_API_VERSION = 'v21.0'
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`
 
+// message_template_library is a newer Graph API field that doesn't
+// exist on v21.0 (confirmed live: "(#100) Tried accessing nonexisting
+// field (message_template_library)") — only the library endpoints
+// need the newer version, everything else in this file stays on
+// v21.0 to avoid an unrelated behavior change.
+const META_API_VERSION_LIBRARY = 'v23.0'
+const META_API_BASE_LIBRARY = `https://graph.facebook.com/${META_API_VERSION_LIBRARY}`
+
 export interface MetaSendResult {
   messageId: string
 }
@@ -765,7 +773,7 @@ export async function browseTemplateLibrary(
   if (language) params.set('language', language)
   if (name) params.set('name', name)
 
-  const url = `${META_API_BASE}/${wabaId}/message_template_library?${params.toString()}`
+  const url = `${META_API_BASE_LIBRARY}/${wabaId}/message_template_library?${params.toString()}`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -823,7 +831,7 @@ export async function createTemplateFromLibrary(
     body.library_template_body_inputs = bodyInputs
   }
 
-  const url = `${META_API_BASE}/${wabaId}/message_templates`
+  const url = `${META_API_BASE_LIBRARY}/${wabaId}/message_templates`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
