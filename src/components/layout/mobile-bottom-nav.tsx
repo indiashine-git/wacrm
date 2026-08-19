@@ -39,7 +39,12 @@ export function MobileBottomNav({ onOpenMore }: MobileBottomNavProps) {
     // "4rem + env(safe-area-inset-bottom)" being exact, not an
     // estimate that drifts if content height ever changes.
     <nav
-      className="shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
+      // z-30: some pages (the automation canvas builder) render a
+      // `fixed inset-0` full-viewport overlay to escape the normal
+      // page layout for a true fullscreen editor. Without an explicit
+      // stacking order this bar has none, so that overlay painted over
+      // it — background disappearing and the rightmost item clipped.
+      className="relative z-30 shrink-0 border-t border-border bg-card pb-[env(safe-area-inset-bottom)] lg:hidden"
       aria-label="Primary"
     >
       <div className="flex h-16 items-stretch">
