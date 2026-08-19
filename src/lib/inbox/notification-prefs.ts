@@ -101,9 +101,31 @@ export function playNotificationSound() {
   }
 }
 
-export function showNotificationPopup(title: string, body: string) {
+/**
+ * Android Chrome throws `TypeError: Illegal constructor` on
+ * `new Notification()` called from page script — it only supports
+ * showing notifications via a Service Worker registration
+ * (`registration.showNotification()`). Desktop Chrome/Firefox/Safari
+ * support both, so routing everything through the service worker
+ * (registered in dashboard-shell.tsx / public/sw.js) works uniformly
+ * everywhere instead of silently no-op'ing on Android behind a
+ * swallowed exception. Falls back to the plain constructor only if a
+ * service worker genuinely isn't available.
+ */
+export async function showNotificationPopup(title: string, body: string) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
+
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, { body, tag: "wacrm-inbox" });
+      return;
+    } catch {
+      // Fall through to the plain constructor below.
+    }
+  }
+
   try {
     const n = new Notification(title, { body, tag: "wacrm-inbox" });
     n.onclick = () => {
@@ -111,6 +133,7 @@ export function showNotificationPopup(title: string, body: string) {
       n.close();
     };
   } catch {
-    // Best-effort.
+    // Best-effort — some platforms (Android Chrome) support neither
+    // path outside a service worker; nothing more we can do here.
   }
 }
