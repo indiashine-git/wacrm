@@ -619,10 +619,20 @@ function InboxPageInner() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel: Conversation list.
             Hidden on mobile when a conversation is selected so the
-            thread can occupy the full width. Always visible on lg+. */}
+            thread can occupy the full width. Always visible on lg+.
+
+            `min-w-0` is load-bearing here too — same issue as the
+            thread panel below (#165), just missed on this sibling.
+            Without it, this flex-1 wrapper can grow past the actual
+            viewport width instead of being clamped to it, which
+            defeats every truncate/min-w-0 fix *inside* ConversationList:
+            they all work correctly relative to this box, but the box
+            itself was the thing overflowing. That's what showed up as
+            "text overflowing, no timestamp" even after those internal
+            fixes were verified correct in isolation. */}
         <div
           className={cn(
-            "flex h-full flex-1 lg:flex-none",
+            "flex h-full min-w-0 flex-1 lg:flex-none",
             hasActiveConv ? "hidden lg:flex" : "flex",
           )}
         >
