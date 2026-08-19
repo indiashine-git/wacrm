@@ -108,24 +108,83 @@ const emptyForm: TemplateFormData = {
   buttons: [],
 };
 
-const COMMON_LANGUAGE_CODES = [
-  'en_US',
-  'en_GB',
-  'en',
-  'es',
-  'es_ES',
-  'es_MX',
-  'fr',
-  'fr_FR',
-  'de',
-  'it',
-  'pt_BR',
-  'pt_PT',
-  'nl',
-  'pl',
-  'ru',
-  'tr',
-  'lt',
+// Meta-supported WhatsApp template language codes, with human-readable
+// labels — a raw code-only <datalist> (the old implementation) renders
+// as an unstyled native OS popup with no way to search by language
+// name, and was missing every major Indian language despite this
+// being an India-based product. Indian languages are pinned first
+// since they're the most likely to actually get picked here; the rest
+// follow alphabetically by label.
+const WHATSAPP_LANGUAGES: { code: string; label: string }[] = [
+  { code: 'en_US', label: 'English (US)' },
+  { code: 'en_GB', label: 'English (UK)' },
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'Hindi' },
+  { code: 'bn', label: 'Bengali' },
+  { code: 'ta', label: 'Tamil' },
+  { code: 'te', label: 'Telugu' },
+  { code: 'mr', label: 'Marathi' },
+  { code: 'gu', label: 'Gujarati' },
+  { code: 'kn', label: 'Kannada' },
+  { code: 'ml', label: 'Malayalam' },
+  { code: 'pa', label: 'Punjabi' },
+  { code: 'ur', label: 'Urdu' },
+  { code: 'af', label: 'Afrikaans' },
+  { code: 'sq', label: 'Albanian' },
+  { code: 'ar', label: 'Arabic' },
+  { code: 'az', label: 'Azerbaijani' },
+  { code: 'bg', label: 'Bulgarian' },
+  { code: 'ca', label: 'Catalan' },
+  { code: 'zh_CN', label: 'Chinese (Simplified)' },
+  { code: 'zh_TW', label: 'Chinese (Traditional)' },
+  { code: 'zh_HK', label: 'Chinese (Hong Kong)' },
+  { code: 'hr', label: 'Croatian' },
+  { code: 'cs', label: 'Czech' },
+  { code: 'da', label: 'Danish' },
+  { code: 'nl', label: 'Dutch' },
+  { code: 'et', label: 'Estonian' },
+  { code: 'fil', label: 'Filipino' },
+  { code: 'fi', label: 'Finnish' },
+  { code: 'fr', label: 'French' },
+  { code: 'ka', label: 'Georgian' },
+  { code: 'de', label: 'German' },
+  { code: 'el', label: 'Greek' },
+  { code: 'ha', label: 'Hausa' },
+  { code: 'he', label: 'Hebrew' },
+  { code: 'hu', label: 'Hungarian' },
+  { code: 'id', label: 'Indonesian' },
+  { code: 'ga', label: 'Irish' },
+  { code: 'it', label: 'Italian' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'kk', label: 'Kazakh' },
+  { code: 'ko', label: 'Korean' },
+  { code: 'lo', label: 'Lao' },
+  { code: 'lv', label: 'Latvian' },
+  { code: 'lt', label: 'Lithuanian' },
+  { code: 'mk', label: 'Macedonian' },
+  { code: 'ms', label: 'Malay' },
+  { code: 'nb', label: 'Norwegian' },
+  { code: 'fa', label: 'Persian' },
+  { code: 'pl', label: 'Polish' },
+  { code: 'pt_BR', label: 'Portuguese (Brazil)' },
+  { code: 'pt_PT', label: 'Portuguese (Portugal)' },
+  { code: 'ro', label: 'Romanian' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'sr', label: 'Serbian' },
+  { code: 'sk', label: 'Slovak' },
+  { code: 'sl', label: 'Slovenian' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'es_AR', label: 'Spanish (Argentina)' },
+  { code: 'es_ES', label: 'Spanish (Spain)' },
+  { code: 'es_MX', label: 'Spanish (Mexico)' },
+  { code: 'sw', label: 'Swahili' },
+  { code: 'sv', label: 'Swedish' },
+  { code: 'th', label: 'Thai' },
+  { code: 'tr', label: 'Turkish' },
+  { code: 'uk', label: 'Ukrainian' },
+  { code: 'uz', label: 'Uzbek' },
+  { code: 'vi', label: 'Vietnamese' },
+  { code: 'zu', label: 'Zulu' },
 ];
 
 function emptyButton(type: TemplateButton['type']): TemplateButton {
@@ -528,6 +587,29 @@ export function TemplateManager() {
     }));
   }
 
+  // Meta caps URL/PHONE_NUMBER/COPY_CODE buttons independently of the
+  // 10-button total (2/1/1 respectively — see TEMPLATE_LIMITS). The
+  // server already enforces this on submit, but surfacing it in the
+  // type picker up front means the user finds out before filling in
+  // every field, not after a rejected submit.
+  const buttonTypeCounts = useMemo(() => {
+    const counts: Record<TemplateButton['type'], number> = {
+      QUICK_REPLY: 0,
+      URL: 0,
+      PHONE_NUMBER: 0,
+      COPY_CODE: 0,
+    };
+    for (const b of form.buttons) counts[b.type]++;
+    return counts;
+  }, [form.buttons]);
+
+  function isButtonTypeAtCap(type: TemplateButton['type']): boolean {
+    if (type === 'URL') return buttonTypeCounts.URL >= TEMPLATE_LIMITS.maxUrlButtons;
+    if (type === 'PHONE_NUMBER') return buttonTypeCounts.PHONE_NUMBER >= TEMPLATE_LIMITS.maxPhoneButtons;
+    if (type === 'COPY_CODE') return buttonTypeCounts.COPY_CODE >= TEMPLATE_LIMITS.maxCopyCodeButtons;
+    return false;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -884,27 +966,31 @@ export function TemplateManager() {
 
               <div className="space-y-2">
                 <Label className="text-muted-foreground">{t('language')}</Label>
-                <Input
-                  list="template-language-codes"
-                  placeholder="en_US"
-                  value={form.language}
-                  onChange={(e) =>
-                    setForm({ ...form, language: e.target.value })
-                  }
+                <Select
+                  value={form.language || undefined}
+                  onValueChange={(val) => {
+                    if (!val) return;
+                    setForm({ ...form, language: val });
+                  }}
                   disabled={editingId !== null}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground disabled:opacity-60 disabled:cursor-not-allowed"
-                />
-                <datalist id="template-language-codes">
-                  {COMMON_LANGUAGE_CODES.map((code) => (
-                    <option key={code} value={code} />
-                  ))}
-                </datalist>
+                >
+                  <SelectTrigger className="w-full bg-muted border-border text-foreground disabled:opacity-60 disabled:cursor-not-allowed">
+                    <SelectValue placeholder={t('languagePlaceholder')} />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border max-h-72">
+                    {WHATSAPP_LANGUAGES.map(({ code, label }) => (
+                      <SelectItem
+                        key={code}
+                        value={code}
+                        className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
+                      >
+                        {label} <span className="text-muted-foreground">({code})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  {editingId ? (
-                    t('langFixed')
-                  ) : (
-                    <span>{t.rich('langHint', { code: (chunks) => <code>{chunks}</code> })}</span>
-                  )}
+                  {editingId ? t('langFixed') : t('langHintSelect')}
                 </p>
               </div>
             </div>
@@ -1039,6 +1125,33 @@ export function TemplateManager() {
                       className="max-h-28 rounded-md border border-border object-contain"
                     />
                   )}
+                  {form.header_format === 'video' && form.header_media_url && (
+                    <video
+                      src={form.header_media_url}
+                      controls
+                      className="max-h-40 w-full rounded-md border border-border"
+                    />
+                  )}
+                  {form.header_format === 'document' && form.header_media_url && (
+                    <a
+                      href={form.header_media_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5 text-xs text-foreground hover:underline"
+                    >
+                      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">
+                        {(() => {
+                          const filename = form.header_media_url.split('/').pop() || form.header_media_url;
+                          try {
+                            return decodeURIComponent(filename);
+                          } catch {
+                            return filename;
+                          }
+                        })()}
+                      </span>
+                    </a>
+                  )}
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     {form.header_format === 'image'
                       ? t('imageHint')
@@ -1131,19 +1244,43 @@ export function TemplateManager() {
                     </p>
                   )}
                   {form.header_format === 'image' && (
-                    <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <ImageIcon className="size-8" />
-                    </div>
+                    form.header_media_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={form.header_media_url}
+                        alt=""
+                        className="h-28 w-full rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <ImageIcon className="size-8" />
+                      </div>
+                    )
                   )}
                   {form.header_format === 'video' && (
-                    <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <Video className="size-8" />
-                    </div>
+                    form.header_media_url ? (
+                      <video src={form.header_media_url} className="h-28 w-full rounded-md object-cover" muted />
+                    ) : (
+                      <div className="flex h-28 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <Video className="size-8" />
+                      </div>
+                    )
                   )}
                   {form.header_format === 'document' && (
                     <div className="flex items-center gap-2 rounded-md bg-muted px-2 py-3 text-muted-foreground">
                       <FileIcon className="size-5" />
-                      <span className="text-xs">Document</span>
+                      <span className="truncate text-xs">
+                        {form.header_media_url
+                          ? (() => {
+                              const filename = form.header_media_url.split('/').pop() || 'Document';
+                              try {
+                                return decodeURIComponent(filename);
+                              } catch {
+                                return filename;
+                              }
+                            })()
+                          : 'Document'}
+                      </span>
                     </div>
                   )}
                   <p className="whitespace-pre-wrap break-words text-sm">
@@ -1234,21 +1371,24 @@ export function TemplateManager() {
                             </SelectItem>
                             <SelectItem
                               value="URL"
+                              disabled={btn.type !== 'URL' && isButtonTypeAtCap('URL')}
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              {t('btnUrl')}
+                              {t('btnUrl')} {btn.type !== 'URL' && isButtonTypeAtCap('URL') && `(${t('limitReached')})`}
                             </SelectItem>
                             <SelectItem
                               value="PHONE_NUMBER"
+                              disabled={btn.type !== 'PHONE_NUMBER' && isButtonTypeAtCap('PHONE_NUMBER')}
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              {t('btnPhone')}
+                              {t('btnPhone')} {btn.type !== 'PHONE_NUMBER' && isButtonTypeAtCap('PHONE_NUMBER') && `(${t('limitReached')})`}
                             </SelectItem>
                             <SelectItem
                               value="COPY_CODE"
+                              disabled={btn.type !== 'COPY_CODE' && isButtonTypeAtCap('COPY_CODE')}
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              {t('btnCopyCode')}
+                              {t('btnCopyCode')} {btn.type !== 'COPY_CODE' && isButtonTypeAtCap('COPY_CODE') && `(${t('limitReached')})`}
                             </SelectItem>
                           </SelectContent>
                         </Select>

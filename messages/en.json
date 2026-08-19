@@ -1427,6 +1427,8 @@
       "language": "Language",
       "langFixed": "Language is fixed once a template exists on Meta.",
       "langHint": "Must match the exact code on Meta — <code>en_US</code> and <code>en</code> are distinct.",
+      "langHintSelect": "en_US and en are treated as distinct languages by Meta.",
+      "languagePlaceholder": "Select a language",
       
       "header": "Header",
       "headerNone": "None",
@@ -1472,7 +1474,8 @@
 
       "buttons": "Buttons (optional)",
       "addButton": "Add Button",
-      "buttonsLimit": "Up to {max} buttons. QUICK_REPLY buttons must come before URL / phone / copy-code buttons.",
+      "buttonsLimit": "Up to {max} buttons total: any number of Quick Reply, up to 2 URL, 1 Phone Number, 1 Copy Code. Quick Reply buttons must come before URL / phone / copy-code buttons.",
+      "limitReached": "limit reached",
       "btnQuickReply": "Quick Reply",
       "btnUrl": "URL",
       "btnPhone": "Phone",
