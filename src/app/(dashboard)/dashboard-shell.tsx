@@ -8,6 +8,7 @@ import { Header } from "@/components/layout/header";
 import { AccountAccessAlert } from "@/components/layout/account-access-alert";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
 import { primeAudioContext } from "@/lib/inbox/notification-prefs";
+import { useGlobalNotifications } from "@/hooks/use-global-notifications";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
@@ -16,6 +17,11 @@ import { primeAudioContext } from "@/lib/inbox/notification-prefs";
 function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+
+  // Alerting has to be mounted here, not inside the Inbox page — a
+  // subscription scoped to that page dies the instant the user
+  // navigates elsewhere, which is exactly when an alert is useful.
+  useGlobalNotifications();
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).

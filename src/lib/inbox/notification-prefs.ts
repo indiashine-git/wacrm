@@ -53,9 +53,12 @@ export function primeAudioContext() {
 }
 
 /**
- * Short two-tone chime synthesized via WebAudio — no bundled audio
+ * WATU's signature chime: a soft three-note rising arpeggio (C6-E6-G6,
+ * a bright major triad) synthesized via WebAudio — no bundled audio
  * asset to fetch/host, and it respects the OS/tab mute state like any
- * other audio source.
+ * other audio source. Each note pairs a sine fundamental with a
+ * quieter octave-up sine for a rounder, more "bell-like" timbre than
+ * a flat single-oscillator beep.
  */
 export function playNotificationSound() {
   try {
@@ -64,19 +67,34 @@ export function playNotificationSound() {
     if (audioCtx.state === "suspended") audioCtx.resume();
 
     const now = audioCtx.currentTime;
-    [880, 1175].forEach((freq, i) => {
-      const osc = audioCtx!.createOscillator();
-      const gain = audioCtx!.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      const start = now + i * 0.09;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.18, start + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
-      osc.connect(gain);
-      gain.connect(audioCtx!.destination);
-      osc.start(start);
-      osc.stop(start + 0.18);
+    const notes = [1046.5, 1318.5, 1568]; // C6, E6, G6
+    notes.forEach((freq, i) => {
+      const start = now + i * 0.1;
+      const duration = 0.32;
+
+      const fundamental = audioCtx!.createOscillator();
+      const fundamentalGain = audioCtx!.createGain();
+      fundamental.type = "sine";
+      fundamental.frequency.value = freq;
+      fundamentalGain.gain.setValueAtTime(0, start);
+      fundamentalGain.gain.linearRampToValueAtTime(0.22, start + 0.015);
+      fundamentalGain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      fundamental.connect(fundamentalGain);
+      fundamentalGain.connect(audioCtx!.destination);
+      fundamental.start(start);
+      fundamental.stop(start + duration);
+
+      const overtone = audioCtx!.createOscillator();
+      const overtoneGain = audioCtx!.createGain();
+      overtone.type = "sine";
+      overtone.frequency.value = freq * 2;
+      overtoneGain.gain.setValueAtTime(0, start);
+      overtoneGain.gain.linearRampToValueAtTime(0.06, start + 0.015);
+      overtoneGain.gain.exponentialRampToValueAtTime(0.001, start + duration * 0.7);
+      overtone.connect(overtoneGain);
+      overtoneGain.connect(audioCtx!.destination);
+      overtone.start(start);
+      overtone.stop(start + duration * 0.7);
     });
   } catch {
     // Best-effort — never let a notification chime break message handling.

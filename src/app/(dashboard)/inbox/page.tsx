@@ -16,12 +16,6 @@ import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  getSoundPref,
-  getPopupPref,
-  playNotificationSound,
-  showNotificationPopup,
-} from "@/lib/inbox/notification-prefs";
 
 // Remembers the agent's show/hide choice for the desktop contact panel
 // across reloads and sessions (device-scoped, like the theme prefs).
@@ -126,14 +120,6 @@ function InboxPageInner() {
     knownConvIdsRef.current = next;
   }, [conversations]);
 
-  // Same rationale as knownConvIdsRef: the message-INSERT handler needs
-  // the current conversation list (for the notification popup's contact
-  // name) synchronously, without a stale closure over `conversations`.
-  const conversationsRef = useRef<Conversation[]>([]);
-  useEffect(() => {
-    conversationsRef.current = conversations;
-  }, [conversations]);
-
   // Pull the conversation row with its `contact` joined and merge it
   // into state. Needed because Supabase Realtime payloads only carry the
   // row's own columns — a brand-new conversation arrives without a
@@ -232,25 +218,9 @@ function InboxPageInner() {
       const newMsg = event.new;
 
       if (event.eventType === "INSERT") {
-        // Alert on inbound customer messages only — never for our own
-        // agent/bot sends echoing back through the same channel.
-        if (newMsg.sender_type === "customer") {
-          if (getSoundPref()) playNotificationSound();
-          // Always fire when the pref is on — an "already viewing"
-          // suppression here was more confusing than useful in
-          // practice (it made testing look broken) and the OS/browser
-          // already avoids double-alerting for a focused, visible tab
-          // on most platforms.
-          if (getPopupPref()) {
-            const conv = conversationsRef.current.find(
-              (c) => c.id === newMsg.conversation_id,
-            );
-            showNotificationPopup(
-              conv?.contact?.name || conv?.contact?.phone || t("newMessageTitle"),
-              newMsg.content_text || t("newMessageBody"),
-            );
-          }
-        }
+        // Sound/popup alerting lives in useGlobalNotifications (mounted
+        // in the dashboard shell) so it keeps working when the user
+        // navigates away from this page — see that hook for why.
 
         // Add to messages if it belongs to active conversation
         if (
