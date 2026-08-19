@@ -49,6 +49,16 @@ export function MobileBottomNav({ onOpenMore }: MobileBottomNavProps) {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => {
+                // Tapping Inbox while already there is a same-route
+                // Link, which Next.js treats as a no-op navigation —
+                // it did nothing when a thread was open, reading as
+                // broken. Tell the page to pop back to the list
+                // instead, matching native chat apps.
+                if (item.href === "/inbox" && pathname.startsWith("/inbox")) {
+                  window.dispatchEvent(new Event("watu:inbox-back-to-list"));
+                }
+              }}
               className={cn(
                 "relative flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground",

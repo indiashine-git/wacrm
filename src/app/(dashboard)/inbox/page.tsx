@@ -532,6 +532,17 @@ function InboxPageInner() {
     router.replace("/inbox", { scroll: false });
   }, [router]);
 
+  // The bottom tab bar's Inbox item is the same route as this page, so
+  // a plain <Link> is a no-op when a thread is already open on mobile
+  // — tapping it did nothing, which read as broken. It dispatches this
+  // event instead so tapping "Inbox" while already here pops back to
+  // the conversation list, matching native chat apps.
+  useEffect(() => {
+    const onBackToList = () => handleCloseConversation();
+    window.addEventListener("watu:inbox-back-to-list", onBackToList);
+    return () => window.removeEventListener("watu:inbox-back-to-list", onBackToList);
+  }, [handleCloseConversation]);
+
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
