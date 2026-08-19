@@ -236,12 +236,12 @@ function InboxPageInner() {
         // agent/bot sends echoing back through the same channel.
         if (newMsg.sender_type === "customer") {
           if (getSoundPref()) playNotificationSound();
-          // Skip the popup when the user is already looking at this
-          // exact thread with the tab focused — it would just be noise.
-          const alreadyViewing =
-            document.visibilityState === "visible" &&
-            activeConversation?.id === newMsg.conversation_id;
-          if (getPopupPref() && !alreadyViewing) {
+          // Always fire when the pref is on — an "already viewing"
+          // suppression here was more confusing than useful in
+          // practice (it made testing look broken) and the OS/browser
+          // already avoids double-alerting for a focused, visible tab
+          // on most platforms.
+          if (getPopupPref()) {
             const conv = conversationsRef.current.find(
               (c) => c.id === newMsg.conversation_id,
             );

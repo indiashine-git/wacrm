@@ -27,7 +27,7 @@
     "aiAgents": "AI Agents",
     "settings": "Settings",
     "beta": "Beta",
-    "unreadConversations": "{count} unread {count, plural, =1 {conversation} other {conversations}}",
+    "unreadConversations": "{messages} unread {messages, plural, =1 {message} other {messages}} across {conversations} {conversations, plural, =1 {conversation} other {conversations}}",
     "unreadNotifications": "{count} unread {count, plural, =1 {notification} other {notifications}}",
     "roleOwner": "Owner",
     "roleAdmin": "Admin",

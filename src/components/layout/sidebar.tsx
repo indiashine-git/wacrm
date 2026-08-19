@@ -117,7 +117,7 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const t = useTranslations("Sidebar");
   const pathname = usePathname();
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
-  const totalUnread = useTotalUnread();
+  const { conversationsWithUnread, totalUnreadMessages } = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
@@ -213,8 +213,12 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-              const showUnreadDot =
-                item.href === "/inbox" && totalUnread > 0 && !isActive;
+              // Stays visible even on the inbox page itself (like the
+              // notifications badge) — the number is real signal now,
+              // not just a "something's new" pulse, so it shouldn't
+              // disappear the moment the user opens the section.
+              const showUnreadBadge =
+                item.href === "/inbox" && totalUnreadMessages > 0;
 
               // Unlike the inbox dot, the notifications count stays visible
               // even while the page is active — it reflects unread state
@@ -245,13 +249,19 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
                         {t("beta")}
                       </span>
                     )}
-                    {showUnreadDot && (
+                    {showUnreadBadge && (
                       <span
-                        aria-label={t("unreadConversations", { count: totalUnread })}
-                        className="relative flex h-2 w-2"
+                        aria-label={t("unreadConversations", {
+                          messages: totalUnreadMessages,
+                          conversations: conversationsWithUnread,
+                        })}
+                        title={t("unreadConversations", {
+                          messages: totalUnreadMessages,
+                          conversations: conversationsWithUnread,
+                        })}
+                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
                       >
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+                        {totalUnreadMessages > 99 ? "99+" : totalUnreadMessages}
                       </span>
                     )}
                     {showNotificationBadge && (

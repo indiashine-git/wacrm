@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { AccountAccessAlert } from "@/components/layout/account-access-alert";
 import { PresenceHeartbeat } from "@/components/presence/presence-heartbeat";
+import { primeAudioContext } from "@/lib/inbox/notification-prefs";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
@@ -26,6 +27,25 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
       router.push("/login");
     }
   }, [user, loading, router]);
+
+  // Unlock the WebAudio context on the first real click/keydown
+  // anywhere in the dashboard — browsers refuse to run audio started
+  // outside a user gesture, and a WebSocket-triggered notification
+  // chime later has no gesture in its call stack. Priming this early
+  // means the sound alert actually plays when a message arrives.
+  useEffect(() => {
+    const unlock = () => {
+      primeAudioContext();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
 
   if (loading) {
     return (

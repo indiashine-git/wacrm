@@ -27,6 +27,31 @@ export function setPopupPref(enabled: boolean) {
 
 let audioCtx: AudioContext | null = null;
 
+function getAudioCtx(): AudioContext | null {
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  if (!audioCtx) audioCtx = new Ctx();
+  return audioCtx;
+}
+
+/**
+ * Browsers refuse to run an AudioContext until it's been resumed
+ * inside a real user gesture (click/keydown/tap) — resuming it from
+ * an async WebSocket callback later, with no gesture in that call
+ * stack, silently does nothing in Chrome/Safari's autoplay policy.
+ * Call this once from a real click/keydown handler as early as
+ * possible (dashboard-shell does this on the first interaction
+ * anywhere in the app) so the context is already running by the time
+ * a notification actually needs to play.
+ */
+export function primeAudioContext() {
+  try {
+    getAudioCtx()?.resume();
+  } catch {
+    // Best-effort.
+  }
+}
+
 /**
  * Short two-tone chime synthesized via WebAudio — no bundled audio
  * asset to fetch/host, and it respects the OS/tab mute state like any
@@ -34,9 +59,8 @@ let audioCtx: AudioContext | null = null;
  */
 export function playNotificationSound() {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    if (!audioCtx) audioCtx = new Ctx();
+    const audioCtx = getAudioCtx();
+    if (!audioCtx) return;
     if (audioCtx.state === "suspended") audioCtx.resume();
 
     const now = audioCtx.currentTime;
