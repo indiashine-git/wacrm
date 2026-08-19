@@ -499,12 +499,23 @@ export function TemplateManager() {
   const headerNeedsMedia =
     form.header_format !== 'none' && form.header_format !== 'text';
 
-  async function handleHeaderImageFile(file: File) {
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      toast.error(t('toastInvalidImage'));
+  // Accepted mime types per header format, matching Meta's Cloud API
+  // header-media constraints (not just what the storage bucket allows).
+  const ACCEPTED_MIME_BY_FORMAT: Record<'image' | 'video' | 'document', string[]> = {
+    image: ['image/jpeg', 'image/png'],
+    video: ['video/mp4', 'video/3gpp'],
+    document: ['application/pdf'],
+  };
+
+  async function handleHeaderMediaFile(
+    file: File,
+    kind: 'image' | 'video' | 'document',
+  ) {
+    if (!ACCEPTED_MIME_BY_FORMAT[kind].includes(file.type)) {
+      toast.error(t('toastInvalidFileType', { format: kind }));
       return;
     }
-    if (file.size > MEDIA_MAX_BYTES_BY_KIND.image) {
+    if (file.size > MEDIA_MAX_BYTES_BY_KIND[kind]) {
       toast.error(
         t('toastImageTooLarge', { size: (file.size / 1024 / 1024).toFixed(1) }),
       );
@@ -907,16 +918,19 @@ export function TemplateManager() {
 
               {headerNeedsMedia && (
                 <div className="space-y-2 mt-2">
-                  {form.header_format === 'image' && (
+                  {(form.header_format === 'image' ||
+                    form.header_format === 'video' ||
+                    form.header_format === 'document') && (
                     <div className="flex items-center gap-2">
                       <input
                         ref={headerFileRef}
                         type="file"
-                        accept="image/jpeg,image/png"
+                        accept={ACCEPTED_MIME_BY_FORMAT[form.header_format].join(',')}
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
-                          if (f) void handleHeaderImageFile(f);
+                          const kind = form.header_format as 'image' | 'video' | 'document';
+                          if (f) void handleHeaderMediaFile(f, kind);
                           e.target.value = '';
                         }}
                       />
@@ -932,10 +946,18 @@ export function TemplateManager() {
                         ) : (
                           <Upload className="h-3.5 w-3.5" />
                         )}
-                        {t('uploadImage')}
+                        {form.header_format === 'image'
+                          ? t('uploadImage')
+                          : form.header_format === 'video'
+                            ? t('uploadVideo')
+                            : t('uploadDocument')}
                       </Button>
                       <span className="text-[11px] text-muted-foreground">
-                        {t('uploadHint')}
+                        {form.header_format === 'image'
+                          ? t('uploadHint')
+                          : form.header_format === 'video'
+                            ? t('uploadHintVideo')
+                            : t('uploadHintDocument')}
                       </span>
                     </div>
                   )}
