@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, Users, Radio, Menu } from "lucide-react";
+import { MessageSquare, Users, Radio, Menu, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import { useTranslations } from "next-intl";
@@ -25,11 +25,11 @@ export function MobileBottomNav({ onOpenMore }: MobileBottomNavProps) {
   const pathname = usePathname();
   const { totalUnreadMessages } = useTotalUnread();
 
-  const items = [
+  const items: { href: string; labelKey: string; icon: LucideIcon; badge?: number }[] = [
     { href: "/inbox", labelKey: "inbox", icon: MessageSquare, badge: totalUnreadMessages },
     { href: "/contacts", labelKey: "contacts", icon: Users },
     { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
-  ] as const;
+  ];
 
   return (
     // Outer element carries the safe-area padding as *extra* space
