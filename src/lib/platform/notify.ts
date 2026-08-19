@@ -29,26 +29,26 @@ async function loadAccount(accountId: string) {
 function messageFor(event: NotifyEvent, accountName: string, reason?: string): string {
   switch (event) {
     case "signup_pending":
-      return `New wacrm signup awaiting approval: "${accountName}". Review at /platform/accounts.`;
+      return `New WATU signup awaiting approval: "${accountName}". Review at /platform/accounts.`;
     case "account_approved":
-      return `Your wacrm account "${accountName}" has been approved. You can now sign in.`;
+      return `Your WATU account "${accountName}" has been approved. You can now sign in.`;
     case "account_rejected":
-      return `Your wacrm account "${accountName}" was not approved.${reason ? ` Reason: ${reason}` : ""}`;
+      return `Your WATU account "${accountName}" was not approved.${reason ? ` Reason: ${reason}` : ""}`;
     case "account_suspended":
-      return `Your wacrm account "${accountName}" has been suspended. Contact support for details.`;
+      return `Your WATU account "${accountName}" has been suspended. Contact support for details.`;
   }
 }
 
 function subjectFor(event: NotifyEvent): string {
   switch (event) {
     case "signup_pending":
-      return "wacrm: new signup awaiting approval";
+      return "WATU: new signup awaiting approval";
     case "account_approved":
-      return "Your wacrm account has been approved";
+      return "Your WATU account has been approved";
     case "account_rejected":
-      return "Your wacrm account was not approved";
+      return "Your WATU account was not approved";
     case "account_suspended":
-      return "Your wacrm account has been suspended";
+      return "Your WATU account has been suspended";
   }
 }
 
@@ -62,21 +62,21 @@ function subjectFor(event: NotifyEvent): string {
 function htmlFor(event: NotifyEvent, accountName: string, reason: string | undefined, siteUrl: string): string {
   const heading = subjectFor(event);
   const ctaHref = event === "signup_pending" ? `${siteUrl}/platform/accounts` : `${siteUrl}/login`;
-  const ctaLabel = event === "signup_pending" ? "Review in platform panel" : "Sign in to wacrm";
+  const ctaLabel = event === "signup_pending" ? "Review in platform panel" : "Sign in to WATU";
 
   let bodyHtml: string;
   switch (event) {
     case "signup_pending":
-      bodyHtml = `New wacrm signup awaiting approval: <strong>${escapeHtml(accountName)}</strong>.`;
+      bodyHtml = `New WATU signup awaiting approval: <strong>${escapeHtml(accountName)}</strong>.`;
       break;
     case "account_approved":
-      bodyHtml = `Your wacrm account <strong>${escapeHtml(accountName)}</strong> has been approved. You can now sign in.`;
+      bodyHtml = `Your WATU account <strong>${escapeHtml(accountName)}</strong> has been approved. You can now sign in.`;
       break;
     case "account_rejected":
-      bodyHtml = `Your wacrm account <strong>${escapeHtml(accountName)}</strong> was not approved.${reason ? ` Reason: ${escapeHtml(reason)}` : ""}`;
+      bodyHtml = `Your WATU account <strong>${escapeHtml(accountName)}</strong> was not approved.${reason ? ` Reason: ${escapeHtml(reason)}` : ""}`;
       break;
     case "account_suspended":
-      bodyHtml = `Your wacrm account <strong>${escapeHtml(accountName)}</strong> has been suspended. Contact support for details.`;
+      bodyHtml = `Your WATU account <strong>${escapeHtml(accountName)}</strong> has been suspended. Contact support for details.`;
       break;
   }
 
@@ -91,9 +91,9 @@ function htmlFor(event: NotifyEvent, accountName: string, reason: string | undef
   <td style="background-color:#0a0a0f;padding:28px 32px;">
     <table role="presentation" cellpadding="0" cellspacing="0"><tr>
       <td style="width:32px;height:32px;background-color:#7c3aed;border-radius:8px;text-align:center;vertical-align:middle;">
-        <span style="color:#ffffff;font-size:18px;font-weight:700;line-height:32px;">w</span>
+        <span style="color:#ffffff;font-size:18px;font-weight:700;line-height:32px;">W</span>
       </td>
-      <td style="padding-left:10px;color:#ffffff;font-size:18px;font-weight:600;">wacrm</td>
+      <td style="padding-left:10px;color:#ffffff;font-size:18px;font-weight:600;">WATU</td>
     </tr></table>
   </td>
 </tr>
@@ -110,7 +110,7 @@ function htmlFor(event: NotifyEvent, accountName: string, reason: string | undef
 </tr>
 <tr>
   <td style="padding:24px 32px;border-top:1px solid #f4f4f5;">
-    <p style="margin:0;font-size:12px;color:#a1a1aa;">wacrm — self-hostable CRM for WhatsApp</p>
+    <p style="margin:0;font-size:12px;color:#a1a1aa;">WATU — WhatsApp CRM by India-Shine</p>
   </td>
 </tr>
 </table>
