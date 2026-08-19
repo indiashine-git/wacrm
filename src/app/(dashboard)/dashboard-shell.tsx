@@ -54,9 +54,18 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
+    // BUG (shipped, now fixed): controllerchange also fires the very
+    // first time a freshly-registered SW takes control of a page that
+    // had none — not just on a real update. Reloading unconditionally
+    // on that first-ever event made the page reload itself right after
+    // install, which broke Chrome's install-prompt eligibility check
+    // (the "Install app" option disappeared). Only reload when a
+    // controller already existed before this listener attached — that
+    // is the actual "a new version just took over" case.
+    const hadControllerAlready = !!navigator.serviceWorker.controller;
     let reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (reloaded) return;
+      if (!hadControllerAlready || reloaded) return;
       reloaded = true;
       window.location.reload();
     });
