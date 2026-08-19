@@ -202,6 +202,7 @@
       "voiceNote": "Voice note",
       "sendTemplate": "Send template",
       "draftWithAI": "Draft a reply with AI",
+      "aiDraftMenuLabel": "AI Draft",
       "addCaption": "Add a caption…",
       "removeAttachment": "Remove attachment",
       "moreActions": "More",

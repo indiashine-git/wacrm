@@ -29,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -643,42 +644,48 @@ export function MessageComposer({
             >
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="border-border bg-popover">
-              <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
-                <ImageIcon className="mr-2 h-4 w-4" />
+            <DropdownMenuContent align="start" className="w-56 border-border bg-popover">
+              {/* Grouped with dim separators between sections — media,
+                  message-composition, AI — instead of one undifferentiated
+                  list, and every label forced to one line (menu is wide
+                  enough that nothing needs to wrap). */}
+              <DropdownMenuItem onClick={() => imageInputRef.current?.click()} className="whitespace-nowrap">
+                <ImageIcon className="mr-2 h-4 w-4 shrink-0" />
                 {t("photo")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => videoInputRef.current?.click()}>
-                <Video className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={() => videoInputRef.current?.click()} className="whitespace-nowrap">
+                <Video className="mr-2 h-4 w-4 shrink-0" />
                 {t("video")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => documentInputRef.current?.click()}>
-                <FileText className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={() => documentInputRef.current?.click()} className="whitespace-nowrap">
+                <FileText className="mr-2 h-4 w-4 shrink-0" />
                 {t("document")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void startRecording()}>
-                <Mic className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={() => void startRecording()} className="whitespace-nowrap">
+                <Mic className="mr-2 h-4 w-4 shrink-0" />
                 {t("voiceNote")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openInteractiveBuilder()}>
-                <MessageSquareDashed className="mr-2 h-4 w-4" />
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem onClick={() => openInteractiveBuilder()} className="whitespace-nowrap">
+                <MessageSquareDashed className="mr-2 h-4 w-4 shrink-0" />
                 {t("interactiveMessage")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setQuickReplyOpen(true)}>
-                <Zap className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={() => setQuickReplyOpen(true)} className="whitespace-nowrap">
+                <Zap className="mr-2 h-4 w-4 shrink-0" />
                 {t("quickReplies")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenTemplates}>
-                <LayoutTemplate className="mr-2 h-4 w-4" />
+              <DropdownMenuItem onClick={onOpenTemplates} className="whitespace-nowrap">
+                <LayoutTemplate className="mr-2 h-4 w-4 shrink-0" />
                 {t("sendTemplate")}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDraft} disabled={drafting}>
+              <DropdownMenuSeparator className="bg-border" />
+              <DropdownMenuItem onClick={handleDraft} disabled={drafting} className="whitespace-nowrap">
                 {drafting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
                 ) : (
-                  <Sparkles className="mr-2 h-4 w-4" />
+                  <Sparkles className="mr-2 h-4 w-4 shrink-0" />
                 )}
-                {t("draftWithAI")}
+                {t("aiDraftMenuLabel")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -239,14 +239,16 @@ export function MessageBubble({
     >
       <div
         className={cn(
-          // Real WhatsApp's bubble "tail" is a squared-off top corner
-          // on the side nearest the avatar/margin — outbound square on
-          // top-right, inbound square on top-left — not the bottom
-          // corner this used to use.
-          "relative rounded-2xl px-3 pb-1.5 pt-2",
+          // Real WhatsApp tail: a squared-off top corner (nearest the
+          // margin — outbound top-right, inbound top-left) PLUS an
+          // actual small triangle protruding from it, built with the
+          // CSS border-triangle trick via Tailwind's before: variant.
+          // A border-radius tweak alone (the previous attempt) doesn't
+          // read as a "tail" — it needs a real point.
+          "relative rounded-2xl px-3 pb-1.5 pt-2 before:absolute before:top-0 before:h-0 before:w-0 before:content-['']",
           isAgent
-            ? "rounded-tr-md bg-primary text-primary-foreground"
-            : "rounded-tl-md bg-muted text-foreground",
+            ? "rounded-tr-md bg-primary text-primary-foreground before:-right-[6px] before:border-t-[7px] before:border-r-[7px] before:border-t-primary before:border-r-transparent"
+            : "rounded-tl-md bg-muted text-foreground before:-left-[6px] before:border-t-[7px] before:border-l-[7px] before:border-t-muted before:border-l-transparent",
         )}
       >
         {reply && (
