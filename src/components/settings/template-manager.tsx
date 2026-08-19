@@ -21,6 +21,8 @@ import {
   Copy,
   Reply,
   Languages,
+  Library,
+  Search,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -187,6 +189,26 @@ const WHATSAPP_LANGUAGES: { code: string; label: string }[] = [
   { code: 'zu', label: 'Zulu' },
 ];
 
+interface LibraryTemplateComponent {
+  type: string;
+  text?: string;
+  format?: string;
+}
+
+interface LibraryTemplate {
+  name: string;
+  language: string;
+  category: string;
+  topic?: string;
+  usecase?: string;
+  industry?: string;
+  components: LibraryTemplateComponent[];
+}
+
+function libraryBodyText(tpl: LibraryTemplate): string {
+  return tpl.components.find((c) => c.type === 'BODY')?.text ?? '';
+}
+
 function emptyButton(type: TemplateButton['type']): TemplateButton {
   switch (type) {
     case 'QUICK_REPLY':
@@ -210,6 +232,16 @@ export function TemplateManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // Meta's Template Library — pre-vetted templates that skip review
+  // and come back status: APPROVED immediately.
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryTemplates, setLibraryTemplates] = useState<LibraryTemplate[]>([]);
+  const [librarySearch, setLibrarySearch] = useState('');
+  const [selectedLibraryTemplate, setSelectedLibraryTemplate] =
+    useState<LibraryTemplate | null>(null);
+  const [libraryOwnName, setLibraryOwnName] = useState('');
+  const [addingFromLibrary, setAddingFromLibrary] = useState(false);
   const [form, setForm] = useState<TemplateFormData>(emptyForm);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -483,6 +515,67 @@ export function TemplateManager() {
     }
   }
 
+  async function openLibrary() {
+    setLibraryOpen(true);
+    setSelectedLibraryTemplate(null);
+    setLibraryOwnName('');
+    await handleBrowseLibrary('');
+  }
+
+  async function handleBrowseLibrary(query: string) {
+    setLibraryLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (query.trim()) params.set('search', query.trim());
+      const res = await fetch(`/api/whatsapp/templates/library?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Browse failed (HTTP ${res.status})`);
+      setLibraryTemplates(data.templates || []);
+    } catch (err) {
+      console.error('Library browse error:', err);
+      toast.error(err instanceof Error ? err.message : t('toastLibraryBrowseFailed'));
+    } finally {
+      setLibraryLoading(false);
+    }
+  }
+
+  function selectLibraryTemplate(tpl: LibraryTemplate) {
+    setSelectedLibraryTemplate(tpl);
+    setLibraryOwnName(tpl.name);
+  }
+
+  async function handleAddFromLibrary() {
+    if (!user || !selectedLibraryTemplate || !libraryOwnName.trim()) return;
+    setAddingFromLibrary(true);
+    try {
+      const tpl = selectedLibraryTemplate;
+      const footer = tpl.components.find((c) => c.type === 'FOOTER')?.text;
+      const res = await fetch('/api/whatsapp/templates/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: libraryOwnName.trim(),
+          language: tpl.language,
+          libraryTemplateName: tpl.name,
+          bodyText: libraryBodyText(tpl),
+          footerText: footer,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Add failed (HTTP ${res.status})`);
+      toast.success(t('toastLibraryAddSuccess'));
+      await fetchTemplates(user.id);
+      setLibraryOpen(false);
+      setSelectedLibraryTemplate(null);
+      setLibraryOwnName('');
+    } catch (err) {
+      console.error('Library add error:', err);
+      toast.error(err instanceof Error ? err.message : t('toastLibraryAddFailed'));
+    } finally {
+      setAddingFromLibrary(false);
+    }
+  }
+
   async function confirmDelete() {
     const target = templateToDelete;
     if (!target || deletingId) return;
@@ -662,6 +755,14 @@ export function TemplateManager() {
         description={t('description')}
         action={
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={openLibrary}
+              title={t('libraryTitle')}
+            >
+              <Library className="size-4" />
+              {t('browseLibrary')}
+            </Button>
             <Button
               variant="outline"
               onClick={handleSyncFromMeta}
@@ -1485,6 +1586,140 @@ export function TemplateManager() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Meta's pre-vetted Template Library — cloning one skips the
+          normal review queue; Meta returns status APPROVED right away. */}
+      <Dialog
+        open={libraryOpen}
+        onOpenChange={(open) => {
+          setLibraryOpen(open);
+          if (!open) {
+            setSelectedLibraryTemplate(null);
+            setLibraryOwnName('');
+            setLibrarySearch('');
+          }
+        }}
+      >
+        <DialogContent className="bg-popover border-border sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-popover-foreground">{t('libraryDialogTitle')}</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {t('libraryDialogDesc')}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleBrowseLibrary(librarySearch);
+                }}
+                placeholder={t('librarySearchPlaceholder')}
+                className="h-9 bg-muted border-border pl-8 text-sm text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => handleBrowseLibrary(librarySearch)}
+              disabled={libraryLoading}
+              className="h-9"
+            >
+              {libraryLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                t('search')
+              )}
+            </Button>
+          </div>
+
+          {selectedLibraryTemplate ? (
+            <div className="space-y-3 pt-2">
+              <div className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center gap-2 flex-wrap mb-2">
+                  <h4 className="font-medium text-foreground text-sm">
+                    {selectedLibraryTemplate.name}
+                  </h4>
+                  <Badge className="text-xs border bg-blue-600/20 text-blue-400 border-blue-600/30">
+                    {selectedLibraryTemplate.category}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground uppercase">
+                    {selectedLibraryTemplate.language}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {libraryBodyText(selectedLibraryTemplate)}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">{t('libraryOwnNameLabel')}</Label>
+                <Input
+                  value={libraryOwnName}
+                  onChange={(e) => setLibraryOwnName(e.target.value)}
+                  placeholder={t('namePlaceholder')}
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                />
+                <p className="text-[11px] text-muted-foreground">{t('libraryOwnNameHint')}</p>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedLibraryTemplate(null)}
+                  className="border-border text-muted-foreground hover:bg-muted"
+                >
+                  {t('back')}
+                </Button>
+                <Button
+                  onClick={handleAddFromLibrary}
+                  disabled={addingFromLibrary || !libraryOwnName.trim()}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                >
+                  {addingFromLibrary ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      {t('adding')}
+                    </>
+                  ) : (
+                    t('useTemplate')
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : libraryLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="size-6 animate-spin text-primary" />
+            </div>
+          ) : libraryTemplates.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              {t('libraryNoResults')}
+            </div>
+          ) : (
+            <div className="grid gap-2 max-h-[50vh] overflow-y-auto pr-1">
+              {libraryTemplates.map((tpl) => (
+                <button
+                  key={`${tpl.name}-${tpl.language}`}
+                  type="button"
+                  onClick={() => selectLibraryTemplate(tpl)}
+                  className="text-left rounded-lg border border-border bg-card p-3 hover:border-primary/50 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="font-medium text-foreground text-sm">{tpl.name}</span>
+                    <Badge className="text-xs border bg-blue-600/20 text-blue-400 border-blue-600/30">
+                      {tpl.category}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground uppercase">{tpl.language}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground line-clamp-2">
+                    {libraryBodyText(tpl)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

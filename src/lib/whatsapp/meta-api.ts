@@ -700,6 +700,152 @@ export async function editMessageTemplate(
   return { success: data?.success !== false }
 }
 
+// ============================================================
+// Template Library (Meta-curated, pre-vetted templates)
+// ============================================================
+//
+// Meta maintains a library of pre-written, pre-vetted templates
+// (order updates, OTPs, appointment reminders, etc.) that skip the
+// normal review queue — creating from the library returns
+// status: "APPROVED" immediately instead of "PENDING". Customizing
+// beyond the library's fill-in-the-blank inputs forces a real review.
+// See https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-library
+
+export interface LibraryTemplateButton {
+  type: string
+  text?: string
+  url?: string
+  phone_number?: string
+}
+
+export interface LibraryTemplateComponent {
+  type: string
+  text?: string
+  format?: string
+  buttons?: LibraryTemplateButton[]
+}
+
+export interface LibraryTemplate {
+  name: string
+  language: string
+  category: string
+  topic?: string
+  usecase?: string
+  industry?: string
+  components: LibraryTemplateComponent[]
+}
+
+export interface BrowseTemplateLibraryArgs {
+  wabaId: string
+  accessToken: string
+  search?: string
+  topic?: string
+  usecase?: string
+  industry?: string
+  language?: string
+  name?: string
+}
+
+/**
+ * Browse Meta's curated template library, optionally filtered. Returns
+ * up to Meta's own page size (no pagination follow-through — the
+ * library is small enough per-filter that one page is enough for v1).
+ */
+export async function browseTemplateLibrary(
+  args: BrowseTemplateLibraryArgs,
+): Promise<LibraryTemplate[]> {
+  const { wabaId, accessToken, search, topic, usecase, industry, language, name } = args
+  const params = new URLSearchParams({
+    fields: 'name,language,category,topic,usecase,industry,components',
+  })
+  if (search) params.set('search', search)
+  if (topic) params.set('topic', topic)
+  if (usecase) params.set('usecase', usecase)
+  if (industry) params.set('industry', industry)
+  if (language) params.set('language', language)
+  if (name) params.set('name', name)
+
+  const url = `${META_API_BASE}/${wabaId}/message_template_library?${params.toString()}`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = (await response.json()) as { data?: LibraryTemplate[] }
+  return data.data ?? []
+}
+
+export interface CreateTemplateFromLibraryArgs {
+  wabaId: string
+  accessToken: string
+  /** Your account-scoped identifier for the new template. */
+  name: string
+  language: string
+  /** Meta requires UTILITY for library-sourced templates. */
+  category: string
+  /** Exact name of the library template being cloned. */
+  libraryTemplateName: string
+  /** Button fill-ins (URL/PHONE_NUMBER dynamic parts) — raw values Meta expects, passed through verbatim. */
+  buttonInputs?: unknown[]
+  /** Body fill-ins the library template exposes (e.g. add_contact_number, code_expiration_minutes). */
+  bodyInputs?: Record<string, unknown>
+}
+
+/**
+ * Create a template FROM the library. Meta pre-vets library content,
+ * so this returns `status: "APPROVED"` immediately — no review wait,
+ * unlike `submitMessageTemplate`.
+ */
+export async function createTemplateFromLibrary(
+  args: CreateTemplateFromLibraryArgs,
+): Promise<SubmitMessageTemplateResult> {
+  const {
+    wabaId,
+    accessToken,
+    name,
+    language,
+    category,
+    libraryTemplateName,
+    buttonInputs,
+    bodyInputs,
+  } = args
+  const body: Record<string, unknown> = {
+    name,
+    language,
+    category,
+    library_template_name: libraryTemplateName,
+  }
+  if (buttonInputs && buttonInputs.length > 0) {
+    body.library_template_button_inputs = buttonInputs
+  }
+  if (bodyInputs && Object.keys(bodyInputs).length > 0) {
+    body.library_template_body_inputs = bodyInputs
+  }
+
+  const url = `${META_API_BASE}/${wabaId}/message_templates`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  if (!data?.id) {
+    throw new Error('Meta accepted the library template but returned no id.')
+  }
+  return {
+    id: String(data.id),
+    status: typeof data.status === 'string' ? data.status : 'APPROVED',
+    category: typeof data.category === 'string' ? data.category : undefined,
+  }
+}
+
 export interface DeleteMessageTemplateArgs {
   wabaId: string
   accessToken: string
