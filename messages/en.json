@@ -134,7 +134,9 @@
   },
   "Inbox": {
     "page": {
-      "whatsappNotConnected": "WhatsApp® is not connected. Go to Settings to connect your account."
+      "whatsappNotConnected": "WhatsApp® is not connected. Go to Settings to connect your account.",
+      "newMessageTitle": "New message",
+      "newMessageBody": "You have a new message"
     },
     "conversationList": {
       "searchPlaceholder": "Search conversations...",
@@ -1644,7 +1646,13 @@
       "useMode": "Use {mode} mode",
       "active": "Active",
       "accentColor": "Accent color",
-      "useTheme": "Use {name} theme"
+      "useTheme": "Use {name} theme",
+      "notifications": "Notifications",
+      "notifySound": "Sound alert",
+      "notifySoundHint": "Play a chime when a new message arrives.",
+      "notifyPopup": "Desktop notifications",
+      "notifyPopupHint": "Show a browser popup for new messages, even in another tab.",
+      "notifyPopupBlocked": "Blocked in your browser's site settings — allow notifications for this site to turn it on."
     },
     "security": {
       "title": "Login & security",

@@ -1,12 +1,21 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, Check, Moon, Palette, SunMoon, Sun, Volume2 } from "lucide-react";
 
 import { useTheme } from "@/hooks/use-theme";
 import { MODES, THEMES, type Mode, type ThemeId } from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { SettingsPanelHead } from "./settings-panel-head";
+import { Switch } from "@/components/ui/switch";
+import {
+  getSoundPref,
+  setSoundPref,
+  getPopupPref,
+  setPopupPref,
+  playNotificationSound,
+} from "@/lib/inbox/notification-prefs";
 
 /**
  * Appearance panel — light/dark mode + accent-color picker.
@@ -73,7 +82,94 @@ export function AppearancePanel() {
           ))}
         </div>
       </div>
+
+      <NotificationsBlock />
     </section>
+  );
+}
+
+/**
+ * Device-scoped inbox notification toggles — same localStorage
+ * pattern as the mode/accent choices above, but two independent
+ * switches: an audible ping on every inbound message, and a browser
+ * Notification popup (which additionally needs OS/browser permission,
+ * requested lazily the moment the user turns it on).
+ */
+function NotificationsBlock() {
+  const t = useTranslations("Settings.appearance");
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [popupEnabled, setPopupEnabled] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+
+  useEffect(() => {
+    setSoundEnabled(getSoundPref());
+    setPopupEnabled(getPopupPref());
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setPermission(Notification.permission);
+    }
+  }, []);
+
+  function handleSoundToggle(checked: boolean) {
+    setSoundEnabled(checked);
+    setSoundPref(checked);
+    if (checked) playNotificationSound();
+  }
+
+  async function handlePopupToggle(checked: boolean) {
+    if (checked && permission !== "granted" && "Notification" in window) {
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      if (result !== "granted") {
+        // Permission denied/dismissed — don't persist an "on" state the
+        // browser will silently refuse to honor.
+        setPopupEnabled(false);
+        setPopupPref(false);
+        return;
+      }
+    }
+    setPopupEnabled(checked);
+    setPopupPref(checked);
+  }
+
+  return (
+    <div className="mt-8 space-y-4">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Bell className="size-4 text-muted-foreground" />
+        {t("notifications")}
+      </h3>
+
+      <div className="max-w-md space-y-3">
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Volume2 className="size-4 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("notifySound")}</p>
+              <p className="text-xs text-muted-foreground">{t("notifySoundHint")}</p>
+            </div>
+          </div>
+          <Switch checked={soundEnabled} onCheckedChange={handleSoundToggle} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center gap-3">
+            <Bell className="size-4 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("notifyPopup")}</p>
+              <p className="text-xs text-muted-foreground">
+                {permission === "denied"
+                  ? t("notifyPopupBlocked")
+                  : t("notifyPopupHint")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={popupEnabled}
+            onCheckedChange={handlePopupToggle}
+            disabled={permission === "denied"}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
