@@ -402,16 +402,22 @@ function InboxPageInner() {
    * never fires `visibilitychange`, so neither existing resync path
    * triggers. That combination let inbound messages sit invisible for
    * minutes on an actively-watched tab (#312) until the user manually
-   * refreshed or navigated away and back. A plain 20s poll bounds the
-   * worst case regardless of WS health — cheap (children dedupe) and
-   * simple, versus reimplementing Realtime's own reconnect logic.
+   * refreshed or navigated away and back.
+   *
+   * useRealtime itself now force-rebuilds the channel on visibility
+   * regain and every 5 minutes regardless (see use-realtime.ts), which
+   * covers the same failure mode more directly — this poll is now a
+   * secondary backstop, not the primary fix, so it runs at a much
+   * lower frequency to avoid a visible refetch/flicker on every mobile
+   * screen every 20s (the earlier interval was too aggressive once the
+   * WS-level fix landed).
    */
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         setResyncToken((n) => n + 1);
       }
-    }, 20_000);
+    }, 90_000);
     return () => clearInterval(interval);
   }, []);
 

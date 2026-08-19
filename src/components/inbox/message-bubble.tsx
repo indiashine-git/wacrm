@@ -43,15 +43,15 @@ interface MessageBubbleProps {
 function StatusIcon({ status }: { status: Message["status"] }) {
   switch (status) {
     case "sending":
-      return <Clock className="h-3 w-3 text-muted-foreground" />;
+      return <Clock className="h-3.5 w-3.5 text-muted-foreground" />;
     case "sent":
-      return <Check className="h-3 w-3 text-muted-foreground" />;
+      return <Check className="h-3.5 w-3.5 text-muted-foreground" />;
     case "delivered":
-      return <CheckCheck className="h-3 w-3 text-muted-foreground" />;
+      return <CheckCheck className="h-3.5 w-3.5 text-muted-foreground" />;
     case "read":
-      return <CheckCheck className="h-3 w-3 text-blue-400" />;
+      return <CheckCheck className="h-3.5 w-3.5 text-blue-400" />;
     case "failed":
-      return <XCircle className="h-3 w-3 text-red-400" />;
+      return <XCircle className="h-3.5 w-3.5 text-red-400" />;
     default:
       return null;
   }
@@ -239,10 +239,14 @@ export function MessageBubble({
     >
       <div
         className={cn(
-          "relative rounded-2xl px-3 py-2",
+          // Real WhatsApp's bubble "tail" is a squared-off top corner
+          // on the side nearest the avatar/margin — outbound square on
+          // top-right, inbound square on top-left — not the bottom
+          // corner this used to use.
+          "relative rounded-2xl px-3 pb-1.5 pt-2",
           isAgent
-            ? "rounded-br-md bg-primary text-primary-foreground"
-            : "rounded-bl-md bg-muted text-foreground",
+            ? "rounded-tr-md bg-primary text-primary-foreground"
+            : "rounded-tl-md bg-muted text-foreground",
         )}
       >
         {reply && (
@@ -252,18 +256,20 @@ export function MessageBubble({
             onPrimary={isAgent}
           />
         )}
-        <MessageContent
-          message={message}
-          t={t}
-          isAgent={isAgent}
-          onOpenMedia={onOpenMedia}
-        />
-        <div
-          className={cn(
-            "mt-1 flex items-center gap-1",
-            isAgent ? "justify-end" : "justify-start",
-          )}
-        >
+        {/* Reserve room bottom-right for the timestamp/ticks corner
+            overlay below, so short last lines don't collide with it. */}
+        <div className="pr-14">
+          <MessageContent
+            message={message}
+            t={t}
+            isAgent={isAgent}
+            onOpenMedia={onOpenMedia}
+          />
+        </div>
+        {/* Timestamp + ticks sit in the bubble's own bottom-right
+            corner, inline with the last line rather than on a
+            separate row below the message — matches WhatsApp. */}
+        <div className="absolute bottom-1.5 right-2.5 flex items-center gap-1">
           {/* AI badge — only on replies the auto-reply bot generated
               (always outbound, so it sits on the primary fill). Lets
               agents tell an AI reply from their own / a Flow's at a
@@ -279,7 +285,7 @@ export function MessageBubble({
           )}
           <span
             className={cn(
-              "text-[10px]",
+              "text-[11px]",
               // Outbound bubbles sit on the primary fill, so the
               // timestamp must read against that (not the neutral
               // foreground) — otherwise it goes low-contrast in light
