@@ -1414,6 +1414,9 @@
 
       "footer": "푸터 (선택)",
       "footerPlaceholder": "선택적 푸터 텍스트 (최대 60자)",
+      "preview": "미리보기",
+      "previewBodyPlaceholder": "메시지 본문이 여기에 표시됩니다",
+      "previewButtonPlaceholder": "버튼",
 
       "buttons": "버튼 (선택)",
       "addButton": "버튼 추가",

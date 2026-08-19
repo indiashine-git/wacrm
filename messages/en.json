@@ -1443,7 +1443,10 @@
       
       "footer": "Footer (optional)",
       "footerPlaceholder": "Optional footer text (max 60 chars)",
-      
+      "preview": "Preview",
+      "previewBodyPlaceholder": "Your message body will appear here",
+      "previewButtonPlaceholder": "Button",
+
       "buttons": "Buttons (optional)",
       "addButton": "Add Button",
       "buttonsLimit": "Up to {max} buttons. QUICK_REPLY buttons must come before URL / phone / copy-code buttons.",
