@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Conversation } from "@/types";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -20,6 +20,14 @@ export interface UnreadSummary {
  * staleness bug as the inbox message feed before that fix (#312).
  */
 export function useTotalUnread(): UnreadSummary {
+  // Supabase Realtime channels are singletons keyed by topic name — two
+  // simultaneously-mounted callers with the same hardcoded channel name
+  // collide (the second tries to .on() a channel the first already
+  // .subscribe()'d, which throws and crashes the page). Sidebar and the
+  // new MobileBottomNav both call this hook at once, so the name has to
+  // be unique per mounted instance, not per hook.
+  const instanceId = useId();
+
   const [summary, setSummary] = useState<UnreadSummary>({
     conversationsWithUnread: 0,
     totalUnreadMessages: 0,
@@ -66,7 +74,7 @@ export function useTotalUnread(): UnreadSummary {
   }, []);
 
   useRealtime({
-    channelName: "total-unread-realtime",
+    channelName: `total-unread-realtime-${instanceId}`,
     onConversationEvent: (event) => {
       if (event.eventType === "DELETE") {
         const oldRow = event.old as Partial<Conversation>;
