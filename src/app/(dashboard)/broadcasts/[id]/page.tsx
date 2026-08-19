@@ -34,6 +34,9 @@ import {
   Trash2,
   PlayCircle,
   RotateCcw,
+  Pencil,
+  CalendarClock,
+  CalendarX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -163,6 +166,9 @@ export default function BroadcastDetailPage() {
   const [resumingScope, setResumingScope] = useState<
     'pending' | 'failed' | null
   >(null);
+  const [confirmSendNow, setConfirmSendNow] = useState(false);
+  const [sendingNow, setSendingNow] = useState(false);
+  const [cancelingSchedule, setCancelingSchedule] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -278,6 +284,50 @@ export default function BroadcastDetailPage() {
     }
   }
 
+  /** Fires a `draft` or `scheduled` broadcast right now, from the detail page. */
+  async function handleSendNow() {
+    setSendingNow(true);
+    try {
+      const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/send`, {
+        method: 'POST',
+      });
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        toast.error(t('toastSendNowFailed', { error: payload?.error || `HTTP ${res.status}` }));
+        return;
+      }
+
+      toast.success(t('toastSendNowStarted', { count: payload.sending ?? 0 }));
+      await fetchData();
+    } catch (err) {
+      toast.error(
+        t('toastSendNowFailed', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }),
+      );
+    } finally {
+      setSendingNow(false);
+    }
+  }
+
+  /** Reverts a `scheduled` broadcast back to `draft` — the cron will no longer pick it up. */
+  async function handleCancelSchedule() {
+    setCancelingSchedule(true);
+    const supabase = createClient();
+    const { error: cancelErr } = await supabase
+      .from('broadcasts')
+      .update({ status: 'draft', scheduled_at: null })
+      .eq('id', broadcastId);
+    setCancelingSchedule(false);
+    if (cancelErr) {
+      toast.error(t('toastCancelScheduleFailed', { error: cancelErr.message }));
+      return;
+    }
+    toast.success(t('toastScheduleCanceled'));
+    await fetchData();
+  }
+
   async function handleDelete() {
     setDeleting(true);
     const supabase = createClient();
@@ -325,6 +375,8 @@ export default function BroadcastDetailPage() {
   // still pending and nothing left to move them. Name that state rather
   // than leaving a permanently pulsing "sending" badge.
   const isStalled = broadcast.status === 'sending' && pendingCount > 0;
+  const isDraftOrScheduled =
+    broadcast.status === 'draft' || broadcast.status === 'scheduled';
 
   const funnelSteps: FunnelStep[] = [
     { label: t('stats.sent'), value: broadcast.sent_count, color: 'bg-primary' },
@@ -364,6 +416,21 @@ export default function BroadcastDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* Edit — draft or scheduled only. Reopens the wizard prefilled;
+            saving/sending recomputes recipients from scratch. */}
+        <div className="flex items-center gap-2">
+        {isDraftOrScheduled && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/broadcasts/new?edit=${broadcastId}`)}
+            className="border-border text-muted-foreground hover:bg-muted"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            {t('edit')}
+          </Button>
+        )}
 
         {/* Delete — inline-confirm pattern matches the pipeline-settings
             "Delete Pipeline" flow. Mid-send broadcasts can't be deleted
@@ -407,11 +474,100 @@ export default function BroadcastDetailPage() {
             {t('delete')}
           </Button>
         )}
+        </div>
       </div>
 
+      {/* Draft / scheduled actions — Send now, and for a scheduled
+          broadcast, its fire time + a way to cancel back to draft. */}
+      {isDraftOrScheduled && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+          <div className="text-sm">
+            {broadcast.status === 'scheduled' && broadcast.scheduled_at ? (
+              <>
+                <p className="flex items-center gap-1.5 font-medium text-foreground">
+                  <CalendarClock className="h-3.5 w-3.5 text-primary" />
+                  {t('scheduledForLabel', {
+                    date: new Date(broadcast.scheduled_at).toLocaleString(),
+                  })}
+                </p>
+                <p className="mt-0.5 text-muted-foreground">
+                  {broadcast.total_recipients > 0
+                    ? t('scheduledLockedHint', { count: broadcast.total_recipients })
+                    : t('scheduledUnlockedHint')}
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                {broadcast.total_recipients > 0
+                  ? t('draftLockedHint', { count: broadcast.total_recipients })
+                  : t('draftUnlockedHint')}
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {broadcast.status === 'scheduled' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelSchedule}
+                disabled={cancelingSchedule || sendingNow}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                {cancelingSchedule ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CalendarX className="h-3.5 w-3.5" />
+                )}
+                {t('cancelSchedule')}
+              </Button>
+            )}
+            {confirmSendNow ? (
+              <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm">
+                <span className="text-foreground">{t('sendNowPrompt')}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmSendNow(false)}
+                  disabled={sendingNow}
+                  className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+                >
+                  {t('cancel')}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setConfirmSendNow(false);
+                    handleSendNow();
+                  }}
+                  disabled={sendingNow}
+                  className="h-7"
+                >
+                  {t('confirm')}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => setConfirmSendNow(true)}
+                disabled={sendingNow || cancelingSchedule}
+              >
+                {sendingNow ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" />
+                )}
+                {t('sendNow')}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Resume / retry (issue #472). Only rendered when there is
-          actually something outstanding. */}
-      {(pendingCount > 0 || retryableCount > 0) && (
+          actually something outstanding, and only once a broadcast has
+          actually left draft/scheduled — a locked draft's recipients
+          sit 'pending' too, but that's not a stalled campaign. */}
+      {!isDraftOrScheduled && (pendingCount > 0 || retryableCount > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
           <div className="text-sm">
             <p className="font-medium text-foreground">

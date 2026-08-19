@@ -14,7 +14,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Users, Save, CalendarClock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 interface AudienceConfig {
@@ -30,9 +30,19 @@ interface Step4Props {
   audience: AudienceConfig;
   onSend: () => void;
   onSaveDraft?: () => void;
+  onSchedule?: (scheduledAt: Date) => void;
+  lockAudience: boolean;
+  onLockAudienceChange: (locked: boolean) => void;
+  isEdit?: boolean;
   onBack: () => void;
   isProcessing: boolean;
   progress: number;
+}
+
+/** `datetime-local`'s value has no timezone — read/write it as local wall-clock time. */
+function toDatetimeLocalValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function Step4ScheduleSend({
@@ -42,6 +52,10 @@ export function Step4ScheduleSend({
   audience,
   onSend,
   onSaveDraft,
+  onSchedule,
+  lockAudience,
+  onLockAudienceChange,
+  isEdit,
   onBack,
   isProcessing,
   progress,
@@ -50,6 +64,9 @@ export function Step4ScheduleSend({
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleValue, setScheduleValue] = useState('');
+  const isCsv = audience.type === 'csv';
 
   useEffect(() => {
     async function calculateReach() {
@@ -144,6 +161,37 @@ export function Step4ScheduleSend({
         </div>
       </div>
 
+      {/* Audience lock — only meaningful when saving as a draft or
+          scheduling (an instant send always resolves now regardless).
+          CSV audiences are a fixed uploaded list, so there is nothing
+          to "recalculate" — force-locked and explained rather than
+          offering a toggle that can't do anything. */}
+      {(onSaveDraft || onSchedule) && (
+        <div className="rounded-xl border border-border bg-card/50 p-4">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={isCsv ? true : lockAudience}
+              disabled={isCsv}
+              onChange={(e) => onLockAudienceChange(e.target.checked)}
+              className="mt-0.5 h-4 w-4 rounded border-border accent-primary disabled:opacity-60"
+            />
+            <span>
+              <span className="block text-sm font-medium text-foreground">
+                {t('scheduleSend.lockAudience')}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {isCsv
+                  ? t('scheduleSend.lockAudienceCsvForced')
+                  : lockAudience
+                    ? t('scheduleSend.lockAudienceOnHint')
+                    : t('scheduleSend.lockAudienceOffHint')}
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* Processing overlay */}
       {isProcessing && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -174,7 +222,7 @@ export function Step4ScheduleSend({
           {t('back')}
         </Button>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {onSaveDraft && (
             <Button
               variant="outline"
@@ -187,6 +235,69 @@ export function Step4ScheduleSend({
             </Button>
           )}
 
+          {onSchedule && (
+            <Dialog open={showSchedule} onOpenChange={setShowSchedule}>
+              <DialogTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    disabled={!name.trim() || isProcessing}
+                    onClick={() => {
+                      // Default to 15 minutes out so the picker never
+                      // opens on a time that's already in the past.
+                      setScheduleValue(
+                        toDatetimeLocalValue(new Date(Date.now() + 15 * 60 * 1000)),
+                      );
+                    }}
+                    className="border-border text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  />
+                }
+              >
+                <CalendarClock className="h-4 w-4" />
+                {t('scheduleSend.scheduleForLater')}
+              </DialogTrigger>
+              <DialogContent className="border-border bg-popover sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-popover-foreground">
+                    {t('scheduleSend.scheduleDialogTitle')}
+                  </DialogTitle>
+                  <DialogDescription className="text-muted-foreground">
+                    {t('scheduleSend.scheduleDialogDescription')}
+                  </DialogDescription>
+                </DialogHeader>
+                <Input
+                  type="datetime-local"
+                  value={scheduleValue}
+                  min={toDatetimeLocalValue(new Date(Date.now() + 60 * 1000))}
+                  onChange={(e) => setScheduleValue(e.target.value)}
+                  className="border-border bg-muted text-foreground"
+                />
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSchedule(false)}
+                    className="border-border text-muted-foreground"
+                  >
+                    {t('cancel')}
+                  </Button>
+                  <Button
+                    disabled={!scheduleValue}
+                    onClick={() => {
+                      const date = new Date(scheduleValue);
+                      if (Number.isNaN(date.getTime())) return;
+                      setShowSchedule(false);
+                      onSchedule(date);
+                    }}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90"
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    {t('scheduleSend.scheduleForLater')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
           <DialogTrigger
             render={
@@ -197,7 +308,7 @@ export function Step4ScheduleSend({
             }
           >
             <Send className="h-4 w-4" />
-            {t('scheduleSend.sendNow')}
+            {isEdit ? t('scheduleSend.updateAndSend') : t('scheduleSend.sendNow')}
           </DialogTrigger>
           <DialogContent className="border-border bg-popover sm:max-w-md">
             <DialogHeader>
@@ -226,7 +337,7 @@ export function Step4ScheduleSend({
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
                 <Send className="h-4 w-4" />
-                {t('scheduleSend.sendNow')}
+                {isEdit ? t('scheduleSend.updateAndSend') : t('scheduleSend.sendNow')}
               </Button>
             </DialogFooter>
           </DialogContent>

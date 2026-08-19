@@ -8,6 +8,13 @@ import {
   batchRetryDelayMs,
 } from '@/lib/broadcast-retry';
 import { Contact, MessageTemplate } from '@/types';
+import {
+  resolveVariables,
+  type VariableMapping,
+} from '@/lib/whatsapp/broadcast-variables';
+
+export { resolveVariables };
+export type { VariableMapping };
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
 
@@ -26,19 +33,7 @@ export interface AudienceConfig {
   excludeTagIds?: string[];
 }
 
-/**
- * Variable mapping — each template placeholder (by key, usually "1",
- * "2", …) is resolved at send time. `field` maps to a built-in contact
- * field (name/phone/email/company); `custom_field` maps to a
- * contact_custom_values.value row keyed by the custom_fields.id stored
- * in `value`.
- */
-export type VariableMapping =
-  | { type: 'static'; value: string }
-  | { type: 'field'; value: string }
-  | { type: 'custom_field'; value: string };
-
-interface BroadcastPayload {
+export interface BroadcastPayload {
   name: string;
   template: MessageTemplate;
   audience: AudienceConfig;
@@ -54,6 +49,15 @@ interface BroadcastPayload {
 
 interface UseBroadcastSendingReturn {
   createAndSendBroadcast: (payload: BroadcastPayload) => Promise<string>;
+  createDraftOrScheduled: (
+    payload: BroadcastPayload,
+    options: {
+      lockAudience: boolean;
+      scheduledAt: string | null;
+      existingBroadcastId?: string;
+    },
+  ) => Promise<string>;
+  resolveAudience: (audience: AudienceConfig) => Promise<Contact[]>;
   isProcessing: boolean;
   progress: number;
 }
@@ -87,44 +91,6 @@ interface BroadcastApiResult {
 
 /** contactId → (customFieldId → value). */
 type CustomValueIndex = Map<string, Map<string, string>>;
-
-/**
- * Per-contact resolution of custom-field placeholders. Static and
- * built-in-field mappings resolve synchronously; custom fields read
- * from a pre-built index to avoid N+1 queries during the send loop.
- */
-export function resolveVariables(
-  variables: Record<string, VariableMapping>,
-  contact: Contact,
-  customValues?: Map<string, string>,
-): string[] {
-  // Keys are typically "1","2",... — numeric-aware sort keeps
-  // {{1}} before {{10}}.
-  const keys = Object.keys(variables).sort((a, b) => {
-    const an = Number(a);
-    const bn = Number(b);
-    if (Number.isFinite(an) && Number.isFinite(bn)) return an - bn;
-    return a.localeCompare(b);
-  });
-
-  return keys.map((key) => {
-    const v = variables[key];
-    if (v.type === 'static') return v.value;
-
-    if (v.type === 'field') {
-      const fieldMap: Record<string, string | undefined> = {
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email,
-        company: contact.company,
-      };
-      return fieldMap[v.value] ?? '';
-    }
-
-    // custom_field
-    return customValues?.get(v.value) ?? '';
-  });
-}
 
 /**
  * Bulk-fetch contact_custom_values for a set of contacts. Returns an
@@ -600,5 +566,174 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     }
   }
 
-  return { createAndSendBroadcast, isProcessing, progress };
+  /**
+   * Save (or update) a broadcast as a `draft` or `scheduled` row —
+   * never sends. Two audience modes:
+   *
+   *  - `lockAudience: true` — resolve the audience NOW (identical
+   *    resolution to an instant send) and insert `broadcast_recipients`
+   *    rows so the campaign is fully ready to fire later via the same
+   *    resume-style delivery the "Send now" / cron path uses. CSV
+   *    audiences are always locked (there is nothing to "recalculate" —
+   *    a CSV is a fixed list), and the raw CSV rows are also stored in
+   *    `audience_filter.csvContacts` so a later edit can rebuild the
+   *    wizard's audience step from the saved row alone.
+   *  - `lockAudience: false` — store only the audience *criteria*
+   *    (tags / custom field / all). No recipient rows are created; the
+   *    actual contact list is computed fresh at fire time (manual
+   *    "Send now" or the schedule cron), so someone added to a
+   *    matching tag after saving is still included.
+   *
+   * Pass `existingBroadcastId` to update an in-place edit (of a draft
+   * or still-scheduled broadcast) instead of creating a new row — any
+   * previously-locked recipient rows are cleared and recomputed so an
+   * edited audience/template never sends the old configuration.
+   */
+  async function createDraftOrScheduled(
+    payload: BroadcastPayload,
+    options: {
+      lockAudience: boolean;
+      scheduledAt: string | null;
+      existingBroadcastId?: string;
+    },
+  ): Promise<string> {
+    const supabase = createClient();
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
+    if (!user) throw new Error('You are not signed in.');
+    if (!accountId) throw new Error('Your profile is not linked to an account.');
+
+    // CSV audiences have nothing dynamic to recalculate — always lock.
+    const lockAudience = options.lockAudience || payload.audience.type === 'csv';
+
+    const audienceFilter: Record<string, unknown> = {
+      type: payload.audience.type,
+      tagIds: payload.audience.tagIds,
+      customField: payload.audience.customField,
+      excludeTagIds: payload.audience.excludeTagIds,
+    };
+    // Only stored for CSV — needed so an edit can rebuild the audience
+    // step without re-uploading. Not resolved contacts, just the raw
+    // uploaded rows (resolution to contact ids happens fresh below).
+    if (payload.audience.type === 'csv') {
+      audienceFilter.csvContacts = payload.audience.csvContacts ?? [];
+    }
+
+    const status = options.scheduledAt ? 'scheduled' : 'draft';
+
+    const broadcastFields = {
+      user_id: user.id,
+      account_id: accountId,
+      name: payload.name,
+      template_name: payload.template.name,
+      template_language: payload.template.language ?? 'en_US',
+      template_variables: payload.variables,
+      audience_filter: audienceFilter,
+      scheduled_at: options.scheduledAt,
+      status,
+    };
+
+    let broadcastId: string;
+    if (options.existingBroadcastId) {
+      broadcastId = options.existingBroadcastId;
+      const { error: updateError } = await supabase
+        .from('broadcasts')
+        .update(broadcastFields)
+        .eq('id', broadcastId);
+      if (updateError) {
+        throw new Error(`Failed to update broadcast: ${updateError.message}`);
+      }
+      // Editing always recomputes from scratch — clear any previously
+      // locked recipients so a changed audience/template can't leave
+      // stale rows that would send the OLD configuration.
+      const { error: clearError } = await supabase
+        .from('broadcast_recipients')
+        .delete()
+        .eq('broadcast_id', broadcastId);
+      if (clearError) {
+        throw new Error(`Failed to clear previous recipients: ${clearError.message}`);
+      }
+    } else {
+      const { data: created, error: createError } = await supabase
+        .from('broadcasts')
+        .insert({
+          ...broadcastFields,
+          total_recipients: 0,
+          sent_count: 0,
+          delivered_count: 0,
+          read_count: 0,
+          replied_count: 0,
+          failed_count: 0,
+        })
+        .select()
+        .single();
+      if (createError || !created) {
+        throw new Error(
+          `Failed to create broadcast: ${createError?.message ?? 'unknown error'}`,
+        );
+      }
+      broadcastId = created.id;
+    }
+
+    if (!lockAudience) {
+      // Recalculate-at-send-time: no recipients yet, total_recipients
+      // stays 0 until fire time resolves the audience server-side.
+      return broadcastId;
+    }
+
+    const contacts = await resolveAudience(payload.audience);
+    if (contacts.length === 0) {
+      throw new Error(
+        'No contacts matched this audience. Save with a broader audience, or use "recalculate at send time" if the match is expected to grow.',
+      );
+    }
+
+    const customValueIndex = await fetchCustomValueIndex(
+      supabase,
+      contacts.map((c) => c.id),
+    );
+    const recipientRows = contacts.map((contact) => ({
+      broadcast_id: broadcastId,
+      contact_id: contact.id,
+      status: 'pending' as const,
+      template_params: resolveVariables(
+        payload.variables,
+        contact,
+        customValueIndex.get(contact.id),
+      ),
+    }));
+
+    for (let i = 0; i < recipientRows.length; i += INSERT_BATCH_SIZE) {
+      const batch = recipientRows.slice(i, i + INSERT_BATCH_SIZE);
+      const { error: recipientError } = await supabase
+        .from('broadcast_recipients')
+        .insert(batch);
+      if (recipientError) {
+        throw new Error(
+          `Failed to insert recipient batch ${i / INSERT_BATCH_SIZE + 1}: ${recipientError.message}`,
+        );
+      }
+    }
+
+    const { error: countError } = await supabase
+      .from('broadcasts')
+      .update({ total_recipients: contacts.length })
+      .eq('id', broadcastId);
+    if (countError) {
+      throw new Error(`Failed to update recipient count: ${countError.message}`);
+    }
+
+    return broadcastId;
+  }
+
+  return {
+    createAndSendBroadcast,
+    createDraftOrScheduled,
+    resolveAudience,
+    isProcessing,
+    progress,
+  };
 }

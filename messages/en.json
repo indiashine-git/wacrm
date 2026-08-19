@@ -690,7 +690,20 @@
       "retryFailed": "Retry failed ({count})",
       "toastResumeStarted": "Sending {count} recipients in the background.",
       "toastResumeStartedCapped": "Sending {count} recipients in the background. {remaining} more will need another run.",
-      "toastResumeFailed": "Could not resume: {error}"
+      "toastResumeFailed": "Could not resume: {error}",
+      "edit": "Edit",
+      "sendNow": "Send now",
+      "sendNowPrompt": "Send this broadcast now?",
+      "cancelSchedule": "Cancel schedule",
+      "scheduledForLabel": "Scheduled for {date}",
+      "scheduledLockedHint": "{count} recipients are ready — it will send to exactly this list.",
+      "scheduledUnlockedHint": "The recipient list will be computed fresh right when it fires.",
+      "draftLockedHint": "{count} recipients are ready to send.",
+      "draftUnlockedHint": "No recipients yet — they'll be computed when this is sent.",
+      "toastSendNowStarted": "Sending {count} recipients now.",
+      "toastSendNowFailed": "Could not send: {error}",
+      "toastScheduleCanceled": "Schedule canceled — back to draft.",
+      "toastCancelScheduleFailed": "Could not cancel schedule: {error}"
     },
     "new": {
       "title": "New Broadcast",
@@ -705,7 +718,15 @@
       "toastNotSignedIn": "Not signed in.",
       "toastNotLinked": "Your profile is not linked to an account.",
       "toastFailedDraft": "Failed to save draft: {error}",
-      "toastDraftSaved": "Draft saved"
+      "toastDraftSaved": "Draft saved",
+      "toastScheduled": "Broadcast scheduled",
+      "toastFailedSchedule": "Failed to schedule: {error}",
+      "toastScheduleInFuture": "Pick a time in the future.",
+      "editTitle": "Edit Broadcast",
+      "editLoadFailed": "Could not load this broadcast.",
+      "editNotEditable": "This broadcast has already started sending and can no longer be edited.",
+      "editTemplateGone": "The template this draft used is no longer available. Delete this draft and start a new one.",
+      "backToBroadcasts": "Back to Broadcasts"
     },
     "wizard": {
       "next": "Next",
@@ -796,10 +817,18 @@
         "variablesMapped": "{count} mapped",
         "saveDraft": "Save as Draft",
         "sendNow": "Send Broadcast",
+        "updateAndSend": "Update & Send",
         "sending": "Sending...",
         "preparing": "Preparing...",
         "progressDesc": "Processing {current} of {total} recipients...",
-        "toastFailedPreview": "Failed to load preview data"
+        "toastFailedPreview": "Failed to load preview data",
+        "lockAudience": "Lock recipient list now",
+        "lockAudienceOnHint": "The audience is resolved as soon as you save. Contacts added later won't be included.",
+        "lockAudienceOffHint": "The audience is recalculated right when this actually sends — anyone newly matching by then is included.",
+        "lockAudienceCsvForced": "A CSV list is fixed, so it's always locked — there's nothing to recalculate.",
+        "scheduleForLater": "Schedule for Later",
+        "scheduleDialogTitle": "Schedule this broadcast",
+        "scheduleDialogDescription": "Pick when it should send. It fires automatically within a few minutes of this time."
       }
     }
   },

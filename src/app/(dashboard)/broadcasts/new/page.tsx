@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from 'sonner';
@@ -11,7 +11,7 @@ import { Step2SelectAudience } from '@/components/broadcasts/step2-select-audien
 import { Step3Personalize } from '@/components/broadcasts/step3-personalize';
 import { Step4ScheduleSend } from '@/components/broadcasts/step4-schedule-send';
 import { useBroadcastSending } from '@/hooks/use-broadcast-sending';
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
 const steps = [
@@ -23,9 +23,16 @@ const steps = [
 
 export default function NewBroadcastPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get('edit');
   const t = useTranslations('Broadcasts.new');
   const { accountId } = useAuth();
-  const { createAndSendBroadcast, isProcessing, progress } = useBroadcastSending();
+  const {
+    createAndSendBroadcast,
+    createDraftOrScheduled,
+    isProcessing,
+    progress,
+  } = useBroadcastSending();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [template, setTemplate] = useState<MessageTemplate | null>(null);
@@ -45,95 +52,224 @@ export default function NewBroadcastPage() {
   >({});
   const [headerMediaUrl, setHeaderMediaUrl] = useState('');
   const [name, setName] = useState('');
+  const [lockAudience, setLockAudience] = useState(true);
+
+  // ── Edit mode: hydrate wizard state from an existing draft/scheduled
+  // broadcast row. Recipients are always recomputed on save (see
+  // createDraftOrScheduled), so nothing here needs to reconstruct the
+  // OLD recipient rows — only the inputs that produced them.
+  const [loadingEdit, setLoadingEdit] = useState(!!editId);
+  const [editLoadError, setEditLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+
+    (async () => {
+      setLoadingEdit(true);
+      setEditLoadError(null);
+      const supabase = createClient();
+
+      const { data: broadcast, error: bcError } = await supabase
+        .from('broadcasts')
+        .select('*')
+        .eq('id', editId)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (bcError || !broadcast) {
+        setEditLoadError(t('editLoadFailed'));
+        setLoadingEdit(false);
+        return;
+      }
+      if (broadcast.status !== 'draft' && broadcast.status !== 'scheduled') {
+        setEditLoadError(t('editNotEditable'));
+        setLoadingEdit(false);
+        return;
+      }
+
+      const { data: templateRow } = await supabase
+        .from('message_templates')
+        .select('*')
+        .eq('name', broadcast.template_name)
+        .eq('language', broadcast.template_language)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (!templateRow) {
+        setEditLoadError(t('editTemplateGone'));
+        setLoadingEdit(false);
+        return;
+      }
+
+      const filter = (broadcast.audience_filter ?? { type: 'all' }) as {
+        type: 'all' | 'tags' | 'custom_field' | 'csv';
+        tagIds?: string[];
+        customField?: {
+          fieldId: string;
+          operator: 'is' | 'is_not' | 'contains';
+          value: string;
+        };
+        csvContacts?: { phone: string; name?: string }[];
+        excludeTagIds?: string[];
+      };
+
+      setName(broadcast.name);
+      setTemplate(templateRow as MessageTemplate);
+      setAudience(filter);
+      setVariables(
+        (broadcast.template_variables ?? {}) as Record<
+          string,
+          { type: 'static' | 'field' | 'custom_field'; value: string }
+        >,
+      );
+      // A recipient count > 0 means this draft was saved with the
+      // audience locked (resolved) — default the toggle to match so
+      // re-saving without touching it preserves the original choice.
+      setLockAudience(
+        filter.type === 'csv' || broadcast.total_recipients > 0,
+      );
+      setLoadingEdit(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, t]);
 
   async function handleSend() {
     if (!template) return;
 
     try {
-      const broadcastId = await createAndSendBroadcast({
-        name,
-        template,
-        audience: {
-          type: audience.type,
-          tagIds: audience.tagIds,
-          customField: audience.customField,
-          csvContacts: audience.csvContacts,
-          excludeTagIds: audience.excludeTagIds,
-        },
-        variables,
-        headerMediaUrl,
-      });
+      let broadcastId: string;
+      if (editId) {
+        // Editing an existing draft/scheduled row: resolve + lock the
+        // (possibly changed) audience into that same row, then fire it
+        // through the server pipeline — same path a scheduled send or
+        // the detail page's "Send now" button uses.
+        broadcastId = await createDraftOrScheduled(
+          { name, template, audience, variables, headerMediaUrl },
+          { lockAudience: true, scheduledAt: null, existingBroadcastId: editId },
+        );
+        const res = await fetch(`/api/whatsapp/broadcast/${broadcastId}/send`, {
+          method: 'POST',
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `HTTP ${res.status}`);
+        }
+      } else {
+        broadcastId = await createAndSendBroadcast({
+          name,
+          template,
+          audience: {
+            type: audience.type,
+            tagIds: audience.tagIds,
+            customField: audience.customField,
+            csvContacts: audience.csvContacts,
+            excludeTagIds: audience.excludeTagIds,
+          },
+          variables,
+          headerMediaUrl,
+        });
+      }
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
-      // Previously swallowed with console.error — the wizard would
-      // just no-op, leaving the user confused. Surface the reason.
       const message = err instanceof Error ? err.message : 'Broadcast failed';
       console.error('Broadcast failed:', err);
       toast.error(message);
     }
   }
 
-  /**
-   * Writes a draft broadcast row — no recipients, no sending. The user
-   * can revisit it via the list page to finish the flow later. We
-   * don't persist the in-progress audience/variable config here
-   * because the current schema doesn't carry it past `audience_filter`
-   * and `template_variables`; those are enough for the user to
-   * recognize the draft but not to exactly round-trip into the wizard.
-   * A full resume-draft UX is a future polish.
-   */
   async function handleSaveDraft() {
     if (!template || !name.trim()) {
       toast.error(t('toastGiveName'));
-      return;
-    }
-    const supabase = createClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user;
-    if (!user) {
-      toast.error(t('toastNotSignedIn'));
       return;
     }
     if (!accountId) {
       toast.error(t('toastNotLinked'));
       return;
     }
+    try {
+      const broadcastId = await createDraftOrScheduled(
+        { name: name.trim(), template, audience, variables, headerMediaUrl },
+        { lockAudience, scheduledAt: null, existingBroadcastId: editId ?? undefined },
+      );
+      toast.success(t('toastDraftSaved'));
+      router.push(`/broadcasts/${broadcastId}`);
+    } catch (err) {
+      toast.error(
+        t('toastFailedDraft', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }),
+      );
+    }
+  }
 
-    const { error } = await supabase.from('broadcasts').insert({
-      user_id: user.id,
-      account_id: accountId,
-      name: name.trim(),
-      template_name: template.name,
-      template_language: template.language ?? 'en_US',
-      template_variables: variables,
-      audience_filter: {
-        type: audience.type,
-        tagIds: audience.tagIds,
-      },
-      status: 'draft',
-      total_recipients: 0,
-      sent_count: 0,
-      delivered_count: 0,
-      read_count: 0,
-      replied_count: 0,
-      failed_count: 0,
-    });
-
-    if (error) {
-      toast.error(t('toastFailedDraft', { error: error.message }));
+  async function handleSchedule(scheduledAt: Date) {
+    if (!template || !name.trim()) {
+      toast.error(t('toastGiveName'));
       return;
     }
-    toast.success(t('toastDraftSaved'));
-    router.push('/broadcasts');
+    if (!accountId) {
+      toast.error(t('toastNotLinked'));
+      return;
+    }
+    if (scheduledAt.getTime() <= Date.now()) {
+      toast.error(t('toastScheduleInFuture'));
+      return;
+    }
+    try {
+      const broadcastId = await createDraftOrScheduled(
+        { name: name.trim(), template, audience, variables, headerMediaUrl },
+        {
+          lockAudience,
+          scheduledAt: scheduledAt.toISOString(),
+          existingBroadcastId: editId ?? undefined,
+        },
+      );
+      toast.success(t('toastScheduled'));
+      router.push(`/broadcasts/${broadcastId}`);
+    } catch (err) {
+      toast.error(
+        t('toastFailedSchedule', {
+          error: err instanceof Error ? err.message : 'Unknown error',
+        }),
+      );
+    }
+  }
+
+  if (loadingEdit) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (editLoadError) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3">
+        <p className="text-sm text-red-400">{editLoadError}</p>
+        <button
+          className="text-sm text-primary underline"
+          onClick={() => router.push('/broadcasts')}
+        >
+          {t('backToBroadcasts')}
+        </button>
+      </div>
+    );
   }
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          {editId ? t('editTitle') : t('title')}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('subtitle')}
         </p>
@@ -223,6 +359,10 @@ export default function NewBroadcastPage() {
               audience={audience}
               onSend={handleSend}
               onSaveDraft={handleSaveDraft}
+              onSchedule={handleSchedule}
+              lockAudience={lockAudience}
+              onLockAudienceChange={setLockAudience}
+              isEdit={!!editId}
               onBack={() => setCurrentStep(2)}
               isProcessing={isProcessing}
               progress={progress}
