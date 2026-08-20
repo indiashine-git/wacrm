@@ -1847,7 +1847,8 @@ export async function sendCatalogMessage(
     body: JSON.stringify(body),
   })
   if (!response.ok) {
-    await throwMetaError(response, `Meta API error: ${response.status}`)
+    const bodyText2 = await response.text()
+    throw new Error(`Meta ${response.status}: ${bodyText2}`)
   }
   const data = await response.json()
   return { messageId: data.messages[0].id }
