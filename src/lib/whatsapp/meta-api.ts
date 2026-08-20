@@ -1687,6 +1687,7 @@ export interface CatalogProduct {
   price?: string
   currency?: string
   image_url?: string
+  additional_image_urls?: string[]
   url?: string
   availability?: string
 }
@@ -1701,7 +1702,7 @@ export async function listCatalogProducts(
   args: ListCatalogProductsArgs
 ): Promise<CatalogProduct[]> {
   const { catalogId, accessToken } = args
-  const url = `${META_API_BASE_LIBRARY}/${catalogId}/products?fields=id,retailer_id,name,description,price,currency,image_url,url,availability&limit=100`
+  const url = `${META_API_BASE_LIBRARY}/${catalogId}/products?fields=id,retailer_id,name,description,price,currency,image_url,additional_image_urls,url,availability&limit=100`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -1722,6 +1723,8 @@ export interface CreateCatalogProductArgs {
   priceMinorUnits: number
   currency: string
   imageUrl: string
+  /** Extra photos beyond the primary image_url -- Meta field additional_image_urls. */
+  additionalImageUrls?: string[]
   productUrl?: string
 }
 
@@ -1729,8 +1732,18 @@ export interface CreateCatalogProductArgs {
 export async function createCatalogProduct(
   args: CreateCatalogProductArgs
 ): Promise<{ productId: string }> {
-  const { catalogId, accessToken, retailerId, name, description, priceMinorUnits, currency, imageUrl, productUrl } =
-    args
+  const {
+    catalogId,
+    accessToken,
+    retailerId,
+    name,
+    description,
+    priceMinorUnits,
+    currency,
+    imageUrl,
+    additionalImageUrls,
+    productUrl,
+  } = args
   const url = `${META_API_BASE_LIBRARY}/${catalogId}/products`
   const response = await fetch(url, {
     method: 'POST',
@@ -1745,6 +1758,7 @@ export async function createCatalogProduct(
       price: priceMinorUnits,
       currency,
       image_url: imageUrl,
+      additional_image_urls: additionalImageUrls?.length ? additionalImageUrls : undefined,
       url: productUrl,
       availability: 'in stock',
       condition: 'new',
@@ -1765,18 +1779,30 @@ export interface UpdateCatalogProductArgs {
   priceMinorUnits?: number
   currency?: string
   imageUrl?: string
+  additionalImageUrls?: string[]
   availability?: string
 }
 
 /** POST /{product_id} (partial update -- only the fields provided). */
 export async function updateCatalogProduct(args: UpdateCatalogProductArgs): Promise<void> {
-  const { productId, accessToken, name, description, priceMinorUnits, currency, imageUrl, availability } = args
+  const {
+    productId,
+    accessToken,
+    name,
+    description,
+    priceMinorUnits,
+    currency,
+    imageUrl,
+    additionalImageUrls,
+    availability,
+  } = args
   const body: Record<string, unknown> = {}
   if (name !== undefined) body.name = name
   if (description !== undefined) body.description = description
   if (priceMinorUnits !== undefined) body.price = priceMinorUnits
   if (currency !== undefined) body.currency = currency
   if (imageUrl !== undefined) body.image_url = imageUrl
+  if (additionalImageUrls !== undefined) body.additional_image_urls = additionalImageUrls
   if (availability !== undefined) body.availability = availability
 
   const url = `${META_API_BASE_LIBRARY}/${productId}`

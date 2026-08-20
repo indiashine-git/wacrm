@@ -12,6 +12,7 @@ import {
   CornerDownLeft,
   Sparkles,
   ClipboardCheck,
+  ShoppingBag,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ReplyQuote } from "./reply-quote";
@@ -85,6 +86,35 @@ function formatFieldLabel(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+interface ParsedOrderLine {
+  quantity: number;
+  productId: string;
+}
+
+/**
+ * Parses the webhook's "[Order]\n1x watu\n2x orbit\nTotal: INR 3.00"
+ * fallback text for a real Meta catalog-order submission back into
+ * structured items + total. Returns null for anything else.
+ */
+function parseOrderText(
+  text: string | null | undefined,
+): { items: ParsedOrderLine[]; total: string } | null {
+  if (!text?.startsWith("[Order]\n")) return null;
+  const lines = text.slice("[Order]\n".length).split("\n");
+  const items: ParsedOrderLine[] = [];
+  let total = "";
+  for (const line of lines) {
+    const itemMatch = line.match(/^(\d+)x (.+)$/);
+    if (itemMatch) {
+      items.push({ quantity: Number(itemMatch[1]), productId: itemMatch[2] });
+      continue;
+    }
+    const totalMatch = line.match(/^Total: (.+)$/);
+    if (totalMatch) total = totalMatch[1];
+  }
+  return items.length > 0 ? { items, total } : null;
+}
+
 function MessageContent({
   message,
   t,
@@ -102,12 +132,34 @@ function MessageContent({
   const openMedia = onOpenMedia ? () => onOpenMedia(message.id) : undefined;
 
   switch (message.content_type) {
-    case "text":
+    case "text": {
+      const order = parseOrderText(message.content_text);
+      if (order) {
+        return (
+          <div className="flex flex-col gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <ShoppingBag className="h-3 w-3" />
+              {t("orderPlaced")}
+            </span>
+            <ul className="space-y-0.5 text-sm">
+              {order.items.map((item, i) => (
+                <li key={i}>
+                  {item.quantity}x {item.productId}
+                </li>
+              ))}
+            </ul>
+            {order.total && (
+              <p className="text-sm font-medium">{t("orderTotal", { total: order.total })}</p>
+            )}
+          </div>
+        );
+      }
       return (
         <p className="whitespace-pre-wrap break-words text-sm">
           {formatWhatsAppText(message.content_text ?? "")}
         </p>
       );
+    }
 
     case "image":
       return (

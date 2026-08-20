@@ -26,6 +26,20 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface CatalogProduct {
+  id: string;
+  retailer_id?: string;
+  name: string;
+  image_url?: string;
+}
 
 interface OrderItem {
   product_retailer_id: string;
@@ -61,9 +75,11 @@ export default function OrdersPage() {
 
   const [sendOpen, setSendOpen] = useState(false);
   const [sendTo, setSendTo] = useState("");
-  const [sendBody, setSendBody] = useState("");
+  const [sendBody, setSendBody] = useState("Browse our latest products 👇");
   const [sendRetailerId, setSendRetailerId] = useState("");
   const [sending, setSending] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   async function fetchOrders() {
     try {
@@ -106,6 +122,23 @@ export default function OrdersPage() {
     }
   }
 
+  async function openSendCatalog() {
+    setSendOpen(true);
+    setLoadingProducts(true);
+    try {
+      const res = await fetch("/api/commerce/products");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Failed (HTTP ${res.status})`);
+      const products: CatalogProduct[] = data.products ?? [];
+      setCatalogProducts(products);
+      setSendRetailerId(products[0]?.retailer_id ?? "");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load your products");
+    } finally {
+      setLoadingProducts(false);
+    }
+  }
+
   async function handleSendCatalog() {
     setSending(true);
     try {
@@ -141,7 +174,7 @@ export default function OrdersPage() {
             Orders customers place from your WhatsApp catalog, and payment links you send for them.
           </p>
         </div>
-        <Button onClick={() => setSendOpen(true)}>
+        <Button onClick={openSendCatalog}>
           <Plus className="h-4 w-4" />
           Send catalog
         </Button>
@@ -253,20 +286,37 @@ export default function OrdersPage() {
               <Input
                 value={sendTo}
                 onChange={(e) => setSendTo(e.target.value)}
-                placeholder="919893049006"
+                placeholder="e.g. 919876543210"
                 className="bg-muted border-border text-foreground"
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-muted-foreground">Thumbnail product retailer ID</Label>
-              <Input
-                value={sendRetailerId}
-                onChange={(e) => setSendRetailerId(e.target.value)}
-                placeholder="A real product id from your catalog"
-                className="bg-muted border-border text-foreground"
-              />
+              <Label className="text-muted-foreground">Featured product</Label>
+              {loadingProducts ? (
+                <div className="flex h-9 items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading your products…
+                </div>
+              ) : catalogProducts.length === 0 ? (
+                <p className="text-xs text-red-400">
+                  No products yet — add one in Settings → Commerce first.
+                </p>
+              ) : (
+                <Select value={sendRetailerId} onValueChange={(v) => v && setSendRetailerId(v)}>
+                  <SelectTrigger className="w-full bg-muted border-border text-foreground">
+                    <SelectValue placeholder="Pick a product to feature" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {catalogProducts.map((p) => (
+                      <SelectItem key={p.id} value={p.retailer_id ?? p.id} className="text-popover-foreground">
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <p className="text-[11px] text-muted-foreground">
-                Meta requires one product to show as the message's thumbnail.
+                Shown as the message's thumbnail — the customer can still browse everything else in your catalog.
               </p>
             </div>
             <div className="space-y-1.5">

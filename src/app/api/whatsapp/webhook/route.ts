@@ -877,8 +877,12 @@ async function processMessage(
     | 'flow_submitted'
   )[] = []
   // Content-level triggers are suppressed when a flow consumed the
-  // message — see the comment block above.
-  if (!flowConsumed) {
+  // message — see the comment block above. Also suppressed for a real
+  // Meta order submission: without this, an order landing ALSO fired
+  // the generic welcome/keyword automations (e.g. "Hey there! I'm the
+  // WATU assistant..."), re-triggering the product menu right after a
+  // customer just finished checking out.
+  if (!flowConsumed && !order) {
     automationTriggers.push('new_message_received', 'keyword_match')
     // Interactive tap → fire the interactive_reply trigger too (only
     // meaningful when a button/list reply actually arrived). Enables
@@ -965,7 +969,7 @@ async function processMessage(
   // the account has enabled it. Awaited inside `after()` (same reason as
   // the webhook dispatch below); `dispatchInboundToAiReply` owns its
   // eligibility gates + try/catch and never throws.
-  if (!flowConsumed && !interactiveReplyId && inboundText.trim()) {
+  if (!flowConsumed && !interactiveReplyId && !order && inboundText.trim()) {
     await dispatchInboundToAiReply({
       accountId,
       conversationId: conversation.id,

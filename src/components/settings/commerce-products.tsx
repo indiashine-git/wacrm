@@ -20,6 +20,7 @@ interface Product {
   price?: string;
   currency?: string;
   image_url?: string;
+  additional_image_urls?: string[];
   availability?: string;
 }
 
@@ -36,10 +37,19 @@ interface DraftProduct {
   price: string;
   currency: string;
   imageUrl: string;
+  additionalImageUrls: string[];
 }
 
 function emptyDraft(): DraftProduct {
-  return { retailerId: '', name: '', description: '', price: '', currency: 'INR', imageUrl: '' };
+  return {
+    retailerId: '',
+    name: '',
+    description: '',
+    price: '',
+    currency: 'INR',
+    imageUrl: '',
+    additionalImageUrls: [],
+  };
 }
 
 /** Add/edit/delete items in the connected Meta catalog, without ever leaving WATU. */
@@ -84,6 +94,7 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
       price: parsePriceToDecimal(product.price),
       currency: product.currency ?? 'INR',
       imageUrl: product.image_url ?? '',
+      additionalImageUrls: product.additional_image_urls ?? [],
     });
     setFormOpen(true);
   }
@@ -103,6 +114,7 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
             priceMinorUnits,
             currency: draft.currency.trim(),
             imageUrl: draft.imageUrl.trim() || undefined,
+            additionalImageUrls: draft.additionalImageUrls.filter(Boolean),
           }),
         });
         const data = await res.json();
@@ -124,6 +136,7 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
             priceMinorUnits,
             currency: draft.currency.trim(),
             imageUrl: draft.imageUrl.trim(),
+            additionalImageUrls: draft.additionalImageUrls.filter(Boolean),
           }),
         });
         const data = await res.json();
@@ -183,13 +196,16 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
             </div>
             {!editingId && (
               <div className="space-y-1.5">
-                <Label className="text-muted-foreground">Retailer ID (unique, e.g. SKU)</Label>
+                <Label className="text-muted-foreground">Product code (a short unique ID for this item)</Label>
                 <Input
                   value={draft.retailerId}
                   onChange={(e) => setDraft((d) => ({ ...d, retailerId: e.target.value }))}
                   placeholder="e.g. watu-plan-basic"
                   className="bg-background border-border text-foreground"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Just a short name only you use to tell this product apart from others -- customers never see it.
+                </p>
               </div>
             )}
             <div className="space-y-1.5">
@@ -231,13 +247,51 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-muted-foreground">Image URL</Label>
+              <Label className="text-muted-foreground">Main photo URL</Label>
               <Input
                 value={draft.imageUrl}
                 onChange={(e) => setDraft((d) => ({ ...d, imageUrl: e.target.value }))}
                 placeholder="https://..."
                 className="bg-background border-border text-foreground"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">More photos (optional)</Label>
+              {draft.additionalImageUrls.map((url, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Input
+                    value={url}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        additionalImageUrls: d.additionalImageUrls.map((u, idx) => (idx === i ? e.target.value : u)),
+                      }))
+                    }
+                    placeholder="https://..."
+                    className="bg-background border-border text-foreground"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDraft((d) => ({
+                        ...d,
+                        additionalImageUrls: d.additionalImageUrls.filter((_, idx) => idx !== i),
+                      }))
+                    }
+                    className="shrink-0 text-muted-foreground hover:text-red-500"
+                    aria-label="Remove photo"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setDraft((d) => ({ ...d, additionalImageUrls: [...d.additionalImageUrls, ''] }))}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                + Add another photo
+              </button>
             </div>
             <Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 text-primary-foreground">
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editingId ? 'Save changes' : 'Add product'}

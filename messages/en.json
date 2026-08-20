@@ -230,6 +230,8 @@
       "template": "Template",
       "buttonReply": "Button reply",
       "formSubmitted": "Form submitted",
+      "orderPlaced": "Order placed",
+      "orderTotal": "Total: {total}",
       "interactiveReply": "[Interactive reply]",
       "unsupported": "[Unsupported message type]",
       "aiBadge": "AI",

@@ -28,12 +28,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const accessToken = await loadToken(accountId, supabase)
 
     const body = await request.json()
-    const { name, description, priceMinorUnits, currency, imageUrl, availability } = body as {
+    const { name, description, priceMinorUnits, currency, imageUrl, additionalImageUrls, availability } = body as {
       name?: string
       description?: string
       priceMinorUnits?: number
       currency?: string
       imageUrl?: string
+      additionalImageUrls?: string[]
       availability?: string
     }
 
@@ -45,6 +46,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       priceMinorUnits,
       currency,
       imageUrl,
+      additionalImageUrls,
       availability,
     })
 

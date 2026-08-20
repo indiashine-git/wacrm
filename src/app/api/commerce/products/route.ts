@@ -48,15 +48,17 @@ export async function POST(request: Request) {
     const { catalogId, accessToken } = await loadCatalogAndToken(supabase, accountId)
 
     const body = await request.json()
-    const { retailerId, name, description, priceMinorUnits, currency, imageUrl, productUrl } = body as {
-      retailerId?: string
-      name?: string
-      description?: string
-      priceMinorUnits?: number
-      currency?: string
-      imageUrl?: string
-      productUrl?: string
-    }
+    const { retailerId, name, description, priceMinorUnits, currency, imageUrl, additionalImageUrls, productUrl } =
+      body as {
+        retailerId?: string
+        name?: string
+        description?: string
+        priceMinorUnits?: number
+        currency?: string
+        imageUrl?: string
+        additionalImageUrls?: string[]
+        productUrl?: string
+      }
     if (!retailerId?.trim() || !name?.trim() || !currency?.trim() || !imageUrl?.trim() || !priceMinorUnits) {
       return NextResponse.json(
         { error: 'retailerId, name, priceMinorUnits, currency, and imageUrl are required.' },
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
       priceMinorUnits,
       currency: currency.trim(),
       imageUrl: imageUrl.trim(),
+      additionalImageUrls: additionalImageUrls?.map((u) => u.trim()).filter(Boolean),
       productUrl: productUrl?.trim(),
     })
 

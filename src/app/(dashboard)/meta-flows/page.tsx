@@ -577,7 +577,7 @@ export default function MetaFlowsPage() {
               <Input
                 value={to}
                 onChange={(e) => setTo(e.target.value)}
-                placeholder="919893049006"
+                placeholder="e.g. 919876543210"
                 className="bg-muted border-border text-foreground"
               />
             </div>
