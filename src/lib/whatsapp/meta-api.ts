@@ -895,6 +895,44 @@ export async function getFlowPreviewUrl(args: GetFlowPreviewUrlArgs): Promise<st
   return data.preview?.preview_url ?? null
 }
 
+export interface DeleteFlowArgs {
+  flowId: string
+  accessToken: string
+}
+
+/** Only works on a DRAFT flow — Meta rejects deleting a PUBLISHED one. */
+export async function deleteFlow(args: DeleteFlowArgs): Promise<void> {
+  const { flowId, accessToken } = args
+  const response = await fetch(`${META_API_BASE_LIBRARY}/${flowId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+}
+
+export interface DeprecateFlowArgs {
+  flowId: string
+  accessToken: string
+}
+
+/**
+ * Retires a PUBLISHED flow — Meta has no "delete" for published flows,
+ * only this one-way deprecation. Once deprecated it can never be
+ * un-deprecated or sent again.
+ */
+export async function deprecateFlow(args: DeprecateFlowArgs): Promise<void> {
+  const { flowId, accessToken } = args
+  const response = await fetch(`${META_API_BASE_LIBRARY}/${flowId}/deprecate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+}
+
 export interface SendFlowMessageArgs {
   phoneNumberId: string
   accessToken: string

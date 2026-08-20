@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   PauseCircle,
   Archive,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,88 @@ const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
   DEPRECATED: Archive,
 };
 
+// Meta's Flow object carries no free-text description field — this
+// derives a short, honest one-liner from the category instead of
+// leaving the card blank (matching the Chatbot cards' description row).
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  LEAD_GENERATION: "Captures lead details as a native in-chat form.",
+  CONTACT_US: "Collects contact details for a follow-up.",
+  CUSTOMER_SUPPORT: "Structured intake for a support request.",
+  APPOINTMENT_BOOKING: "Native form for booking an appointment.",
+  SURVEY: "Structured survey collected as a native form.",
+  SIGN_UP: "Native sign-up form.",
+  SIGN_IN: "Native sign-in form.",
+  SHOPPING: "Native form for a shopping flow.",
+  OTHER: "Custom native WhatsApp form.",
+};
+
+function describeFlow(flow: MetaFlow): string {
+  return CATEGORY_DESCRIPTIONS[flow.categories[0]] ?? "Native WhatsApp form.";
+}
+
+// Meta has no public API (and no confirmed gallery/library feature)
+// for pre-built Flow templates to clone -- checked, the same dead end
+// as the message template library. These are ours: real starter
+// field-sets for common business needs, so "Create Flow" isn't a
+// blank form every time.
+interface FlowTemplate {
+  key: string;
+  label: string;
+  description: string;
+  category: string;
+  fields: DraftField[];
+  footerLabel: string;
+}
+
+const FLOW_TEMPLATES: FlowTemplate[] = [
+  {
+    key: "lead_capture",
+    label: "Lead Capture",
+    description: "Name, business, team size — for pricing/sales inquiries.",
+    category: "LEAD_GENERATION",
+    fields: [
+      { name: "full_name", label: "Your name", inputType: "text" },
+      { name: "business_name", label: "Business name", inputType: "text" },
+      { name: "team_size", label: "Team size", inputType: "number" },
+    ],
+    footerLabel: "Get a Quote",
+  },
+  {
+    key: "book_demo",
+    label: "Book a Demo",
+    description: "Name, email, and preferred day for a live walkthrough.",
+    category: "APPOINTMENT_BOOKING",
+    fields: [
+      { name: "full_name", label: "Your name", inputType: "text" },
+      { name: "email", label: "Email", inputType: "email" },
+      { name: "preferred_day", label: "Preferred day", inputType: "text" },
+    ],
+    footerLabel: "Book Demo",
+  },
+  {
+    key: "support_ticket",
+    label: "Support Ticket",
+    description: "Account contact + issue summary, so an agent isn't starting blind.",
+    category: "CUSTOMER_SUPPORT",
+    fields: [
+      { name: "account_contact", label: "Phone or email on your account", inputType: "text" },
+      { name: "issue_summary", label: "What's going wrong?", inputType: "text" },
+    ],
+    footerLabel: "Submit",
+  },
+  {
+    key: "feedback_survey",
+    label: "Customer Feedback",
+    description: "Quick post-purchase or post-support satisfaction check.",
+    category: "SURVEY",
+    fields: [
+      { name: "rating", label: "Rating (1-5)", inputType: "number" },
+      { name: "comments", label: "Anything else?", inputType: "text" },
+    ],
+    footerLabel: "Send Feedback",
+  },
+];
+
 const CATEGORIES = [
   "LEAD_GENERATION",
   "CONTACT_US",
@@ -92,6 +175,10 @@ function toScreenId(name: string): string {
 export default function MetaFlowsPage() {
   const [loading, setLoading] = useState(true);
   const [flows, setFlows] = useState<MetaFlow[]>([]);
+
+  const [previewFlow, setPreviewFlow] = useState<MetaFlow | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const [sendTarget, setSendTarget] = useState<MetaFlow | null>(null);
   const [to, setTo] = useState("");
@@ -126,15 +213,21 @@ export default function MetaFlowsPage() {
   }, []);
 
   async function openPreview(flow: MetaFlow) {
+    setPreviewFlow(flow);
+    setPreviewUrl(null);
+    setPreviewLoading(true);
     try {
       const res = await fetch(`/api/whatsapp/flows/${flow.id}/preview`);
       const data = await res.json();
       if (!res.ok || !data.previewUrl) {
         throw new Error(data?.error || "No preview available");
       }
-      window.open(data.previewUrl, "_blank", "noopener,noreferrer");
+      setPreviewUrl(data.previewUrl);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to open preview");
+      setPreviewFlow(null);
+    } finally {
+      setPreviewLoading(false);
     }
   }
 
@@ -166,12 +259,40 @@ export default function MetaFlowsPage() {
     }
   }
 
+  async function handleRemove(flow: MetaFlow) {
+    const isDraft = flow.status === "DRAFT";
+    const yes = window.confirm(
+      isDraft
+        ? `Delete "${flow.name}"? This can't be undone.`
+        : `Deprecate "${flow.name}"? Meta has no way to un-deprecate a published flow — it can never be sent again.`,
+    );
+    if (!yes) return;
+
+    try {
+      const action = isDraft ? "" : "?action=deprecate";
+      const res = await fetch(`/api/whatsapp/flows/${flow.id}${action}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Failed (HTTP ${res.status})`);
+      toast.success(isDraft ? "Flow deleted" : "Flow deprecated");
+      await fetchFlows();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove flow");
+    }
+  }
+
   function openCreateDialog() {
     setDraftName("");
     setDraftCategory("LEAD_GENERATION");
     setDraftFooterLabel("Submit");
     setDraftFields([emptyField()]);
     setCreateOpen(true);
+  }
+
+  function useTemplate(template: FlowTemplate) {
+    setDraftName(template.label);
+    setDraftCategory(template.category);
+    setDraftFooterLabel(template.footerLabel);
+    setDraftFields(template.fields.map((f) => ({ ...f })));
   }
 
   function updateField(index: number, patch: Partial<DraftField>) {
@@ -289,7 +410,7 @@ export default function MetaFlowsPage() {
                 </div>
 
                 <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
-                  ID: {flow.id}
+                  {describeFlow(flow)}
                 </p>
 
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
@@ -319,12 +440,60 @@ export default function MetaFlowsPage() {
                     <Send className="h-3.5 w-3.5" />
                     Send
                   </Button>
+                  {flow.status !== "DEPRECATED" && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemove(flow)}
+                      className="text-red-400 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {flow.status === "DRAFT" ? "Delete" : "Deprecate"}
+                    </Button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* Preview dialog — an in-app iframe of Meta's own preview page,
+          not a redirect to a new tab. Meta's preview endpoint sends no
+          X-Frame-Options / frame-ancestors restriction, so it embeds
+          fine; the surrounding chrome (header, close button, loading
+          state) stays in our theme even though the form content
+          itself is rendered by Meta. */}
+      <Dialog
+        open={previewFlow !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewFlow(null);
+            setPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="bg-popover border-border sm:max-w-md h-[80vh] flex flex-col p-0 gap-0">
+          <DialogHeader className="border-b border-border px-4 py-3">
+            <DialogTitle className="text-popover-foreground text-sm">
+              {previewFlow?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="relative min-h-0 flex-1 bg-muted">
+            {previewLoading ? (
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : previewUrl ? (
+              <iframe
+                src={previewUrl}
+                title={`Preview of ${previewFlow?.name}`}
+                className="h-full w-full border-0"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Send dialog */}
       <Dialog open={sendTarget !== null} onOpenChange={(open) => !open && setSendTarget(null)}>
@@ -409,7 +578,30 @@ export default function MetaFlowsPage() {
           </DialogHeader>
 
           <div className="space-y-4 py-1">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Start from a template
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {FLOW_TEMPLATES.map((template) => (
+                  <button
+                    key={template.key}
+                    type="button"
+                    onClick={() => useTemplate(template)}
+                    className="flex flex-col gap-1 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted"
+                  >
+                    <span className="text-sm font-medium text-popover-foreground">
+                      {template.label}
+                    </span>
+                    <span className="text-[11px] leading-relaxed text-muted-foreground">
+                      {template.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 border-t border-border pt-4">
               <div className="space-y-1.5">
                 <Label className="text-muted-foreground">Name</Label>
                 <Input
