@@ -56,6 +56,11 @@ const SECURITY_HEADERS = [
       // Supabase REST + realtime (WSS). All Meta API calls happen
       // server-side, so graph.facebook.com does not belong here.
       "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+      // The Flows page iframes Meta's own Flow-preview page
+      // (business.facebook.com) inside a themed dialog instead of
+      // opening a new tab — no frame-src default falls back to
+      // default-src 'self', which would block it.
+      "frame-src 'self' https://business.facebook.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
