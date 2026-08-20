@@ -99,13 +99,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq('id', orderId)
 
     try {
-      // Meta's cta_url button is only confirmed to accept http(s) URLs
-      // (Razorpay's short_url qualifies). A raw upi:// deep link is an
-      // unconfirmed edge case there, so it keeps using a plain text
-      // message -- WhatsApp's own auto-link-detection already opens it
-      // fine on tap, and that's the exact path a real payment succeeded
-      // through tonight.
-      if (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')) {
+      // Always try the clean "Pay now" button first -- nicer for the
+      // customer than a raw link. Meta's cta_url button is only
+      // documented for http(s) URLs, so a upi:// deep link (no gateway
+      // account) is an unconfirmed edge case there; if Meta rejects it,
+      // fall back to plain text in the same request rather than pre-
+      // guessing and leaving UPI stuck with the ugly link forever.
+      try {
         await sendMessageToConversation(supabase, accountId, {
           conversationId: order.conversation_id,
           messageType: 'interactive',
@@ -116,7 +116,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             url: paymentLink,
           },
         })
-      } else {
+      } catch (ctaErr) {
+        console.warn('[payment-link] cta_url send rejected, falling back to text:', ctaErr instanceof Error ? ctaErr.message : ctaErr)
         await sendMessageToConversation(supabase, accountId, {
           conversationId: order.conversation_id,
           messageType: 'text',
