@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Broadcast } from '@/types';
+import { Broadcast, MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -65,6 +65,9 @@ export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Keyed by "name::language" so a preview line can sit under the
+  // template name without a separate lookup per row.
+  const [templateBodies, setTemplateBodies] = useState<Map<string, string>>(new Map());
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -79,6 +82,18 @@ export default function BroadcastsPage() {
 
       if (fetchError) throw fetchError;
       setBroadcasts(data ?? []);
+
+      // Best-effort — one fetch of every template in play across all
+      // broadcasts rather than N queries. A row whose template was
+      // since edited/deleted just falls back to showing the name.
+      const { data: templates } = await supabase
+        .from('message_templates')
+        .select('name, language, body_text');
+      const map = new Map<string, string>();
+      for (const tpl of (templates as Pick<MessageTemplate, 'name' | 'language' | 'body_text'>[]) ?? []) {
+        map.set(`${tpl.name}::${tpl.language}`, tpl.body_text);
+      }
+      setTemplateBodies(map);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('errorLoad'));
     } finally {
@@ -243,8 +258,13 @@ export default function BroadcastsPage() {
                     <TableCell className="font-medium text-foreground">
                       {broadcast.name}
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground md:table-cell">
-                      {broadcast.template_name}
+                    <TableCell className="hidden max-w-xs md:table-cell">
+                      <p className="text-muted-foreground">{broadcast.template_name}</p>
+                      {templateBodies.get(`${broadcast.template_name}::${broadcast.template_language}`) && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                          {templateBodies.get(`${broadcast.template_name}::${broadcast.template_language}`)}
+                        </p>
+                      )}
                     </TableCell>
                     <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
                       {broadcast.total_recipients}

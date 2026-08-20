@@ -688,9 +688,11 @@
       "exportCsv": "Export CSV",
       "noRecipients": "No recipients found.",
       "noRecipientsFilter": "No recipients match this filter.",
+      "messagePreview": "Message preview",
       "table": {
         "contact": "Contact",
         "phone": "Phone",
+        "message": "Message",
         "status": "Status",
         "sent": "Sent",
         "delivered": "Delivered",

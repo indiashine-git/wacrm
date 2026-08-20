@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { Broadcast, BroadcastRecipient, RecipientStatus } from '@/types';
+import { Broadcast, BroadcastRecipient, MessageTemplate, RecipientStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -150,6 +150,16 @@ function toCsv(rows: string[][]): string {
   return rows.map((r) => r.map(escape).join(',')).join('\n');
 }
 
+/** Replace `{{1}}`, `{{2}}`, ... with the given values; leaves the
+ *  placeholder in place when there's no value at that index, so a
+ *  partially-filled preview stays legible rather than showing blanks. */
+function renderTemplateBody(body: string, params: string[]): string {
+  return body.replace(/\{\{(\d+)\}\}/g, (match, idx) => {
+    const value = params[Number(idx) - 1];
+    return value && value.trim() ? value : match;
+  });
+}
+
 function downloadBlob(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -171,6 +181,7 @@ export default function BroadcastDetailPage() {
 
   const [broadcast, setBroadcast] = useState<Broadcast | null>(null);
   const [recipients, setRecipients] = useState<BroadcastRecipient[]>([]);
+  const [template, setTemplate] = useState<MessageTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<RecipientStatus | 'all'>(
@@ -206,6 +217,18 @@ export default function BroadcastDetailPage() {
 
       if (recsError) throw recsError;
       setRecipients(recs ?? []);
+
+      // Best-effort — the exact template row may have been edited/
+      // deleted since this broadcast sent. The rendered preview falls
+      // back to raw {{n}} placeholders when it's missing, never blocks
+      // the rest of the page.
+      const { data: tmpl } = await supabase
+        .from('message_templates')
+        .select('*')
+        .eq('name', bc.template_name)
+        .eq('language', bc.template_language)
+        .maybeSingle();
+      setTemplate((tmpl as MessageTemplate | null) ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('notFound'));
     } finally {
@@ -492,6 +515,38 @@ export default function BroadcastDetailPage() {
         </div>
       </div>
 
+      {/* Message preview — the actual rendered body, not just the
+          template's raw name. Uses the first recipient's frozen
+          template_params (the real values that were sent) rather than
+          broadcast.template_variables, which stores the *mapping
+          config* (static / contact field / custom field), not the
+          resolved-per-send text. */}
+      {template && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t('messagePreview')}
+          </p>
+          <div className="max-w-md rounded-lg bg-muted/50 p-3">
+            {template.header_type === 'text' && template.header_content && (
+              <p className="mb-1 text-sm font-semibold text-foreground">
+                {template.header_content}
+              </p>
+            )}
+            <p className="whitespace-pre-wrap text-sm text-foreground">
+              {renderTemplateBody(
+                template.body_text,
+                recipients[0]?.template_params ?? [],
+              )}
+            </p>
+            {template.footer_text && (
+              <p className="mt-1 text-xs italic text-muted-foreground">
+                {template.footer_text}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Draft / scheduled actions — Send now, and for a scheduled
           broadcast, its fire time + a way to cancel back to draft. */}
       {isDraftOrScheduled && (
@@ -755,6 +810,7 @@ export default function BroadcastDetailPage() {
                 <TableRow className="border-border hover:bg-transparent">
                   <TableHead className="text-muted-foreground">{t('table.contact')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.phone')}</TableHead>
+                  <TableHead className="text-muted-foreground">{t('table.message')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.sent')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.delivered')}</TableHead>
@@ -772,6 +828,15 @@ export default function BroadcastDetailPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {recipient.contact?.phone ?? '-'}
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={
+                        template
+                          ? renderTemplateBody(template.body_text, recipient.template_params ?? [])
+                          : undefined
+                      }>
+                        {template
+                          ? renderTemplateBody(template.body_text, recipient.template_params ?? [])
+                          : '-'}
                       </TableCell>
                       <TableCell>
                         <span
