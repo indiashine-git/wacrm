@@ -297,7 +297,11 @@ export async function connectCatalogToWaba(args: ConnectCatalogToWabaArgs): Prom
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!response.ok) {
-    await throwMetaError(response, 'Failed to connect catalog to WhatsApp account.')
+    // Surface Meta's full error body (code/subcode/fbtrace_id), not
+    // just the message -- needed once to diagnose a genuinely opaque
+    // "An unknown error occurred" response.
+    const bodyText = await response.text()
+    throw new Error(`Meta ${response.status}: ${bodyText}`)
   }
 }
 
