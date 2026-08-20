@@ -132,7 +132,7 @@ export function CommercePanel() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {!catalogId.trim() && canEditSettings && (
+            {canEditSettings && (
               <Button
                 type="button"
                 onClick={handleCreateCatalog}
@@ -140,8 +140,13 @@ export function CommercePanel() {
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {creatingCatalog ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Create my catalog
+                {catalogId.trim() ? 'Create a new catalog' : 'Create my catalog'}
               </Button>
+            )}
+            {catalogId.trim() && (
+              <p className="text-[11px] text-muted-foreground">
+                You already have a catalog connected below. Only create a new one if you want to replace it.
+              </p>
             )}
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Catalog ID</Label>
@@ -161,7 +166,7 @@ export function CommercePanel() {
             )}
             <details className="text-xs text-muted-foreground">
               <summary className="cursor-pointer select-none hover:text-foreground">
-                Prefer to do it manually, or the button above failed?
+                Prefer to do it manually, or the button above didn&apos;t work?
               </summary>
               <ol className="mt-2 list-decimal space-y-1 pl-4">
                 <li>
