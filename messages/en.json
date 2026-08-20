@@ -23,7 +23,7 @@
     "pipelines": "Pipelines",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
-    "flows": "Flows",
+    "flows": "Chatbot",
     "aiAgents": "AI Agents",
     "settings": "Settings",
     "more": "More",
@@ -1055,7 +1055,7 @@
   },
   "Flows": {
     "list": {
-      "title": "Flows",
+      "title": "Chatbot",
       "beta": "Beta",
       "description": "Build branching, button-driven WhatsApp conversations. Useful for menus, FAQs, and triage before a human steps in.",
       "newFlow": "New flow",
