@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, X, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { uploadAccountMedia, MEDIA_MAX_BYTES_BY_KIND } from '@/lib/storage/upload-media';
 
 interface Product {
   id: string;
@@ -60,6 +61,48 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftProduct>(emptyDraft());
   const [saving, setSaving] = useState(false);
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const mainFileInputRef = useRef<HTMLInputElement>(null);
+  const additionalFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadTargetIndex, setUploadTargetIndex] = useState<number | null>(null);
+
+  async function uploadPhoto(file: File): Promise<string> {
+    if (file.size > MEDIA_MAX_BYTES_BY_KIND.image) {
+      throw new Error('Photo is too large -- keep it under 5 MB.');
+    }
+    const { publicUrl } = await uploadAccountMedia('chat-media', file);
+    return publicUrl;
+  }
+
+  async function handleMainFileSelected(file: File) {
+    setUploadingMain(true);
+    try {
+      const url = await uploadPhoto(file);
+      setDraft((d) => ({ ...d, imageUrl: url }));
+      toast.success('Photo uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload photo');
+    } finally {
+      setUploadingMain(false);
+    }
+  }
+
+  async function handleAdditionalFileSelected(index: number, file: File) {
+    setUploadingIndex(index);
+    try {
+      const url = await uploadPhoto(file);
+      setDraft((d) => ({
+        ...d,
+        additionalImageUrls: d.additionalImageUrls.map((u, idx) => (idx === index ? url : u)),
+      }));
+      toast.success('Photo uploaded');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to upload photo');
+    } finally {
+      setUploadingIndex(null);
+    }
+  }
 
   async function fetchProducts() {
     try {
@@ -247,12 +290,36 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
               </div>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-muted-foreground">Main photo URL</Label>
-              <Input
-                value={draft.imageUrl}
-                onChange={(e) => setDraft((d) => ({ ...d, imageUrl: e.target.value }))}
-                placeholder="https://..."
-                className="bg-background border-border text-foreground"
+              <Label className="text-muted-foreground">Main photo</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={draft.imageUrl}
+                  onChange={(e) => setDraft((d) => ({ ...d, imageUrl: e.target.value }))}
+                  placeholder="https://... or upload a file"
+                  className="bg-background border-border text-foreground"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadingMain}
+                  onClick={() => mainFileInputRef.current?.click()}
+                  className="shrink-0"
+                >
+                  {uploadingMain ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Upload
+                </Button>
+              </div>
+              <input
+                ref={mainFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) handleMainFileSelected(file);
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -267,9 +334,22 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
                         additionalImageUrls: d.additionalImageUrls.map((u, idx) => (idx === i ? e.target.value : u)),
                       }))
                     }
-                    placeholder="https://..."
+                    placeholder="https://... or upload a file"
                     className="bg-background border-border text-foreground"
                   />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={uploadingIndex === i}
+                    onClick={() => {
+                      setUploadTargetIndex(i);
+                      additionalFileInputRef.current?.click();
+                    }}
+                    className="shrink-0"
+                  >
+                    {uploadingIndex === i ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  </Button>
                   <button
                     type="button"
                     onClick={() =>
@@ -285,6 +365,17 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
                   </button>
                 </div>
               ))}
+              <input
+                ref={additionalFileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file && uploadTargetIndex !== null) handleAdditionalFileSelected(uploadTargetIndex, file);
+                }}
+              />
               <button
                 type="button"
                 onClick={() => setDraft((d) => ({ ...d, additionalImageUrls: [...d.additionalImageUrls, ''] }))}
