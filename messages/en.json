@@ -292,7 +292,18 @@
       "deals": "Deals",
       "noTags": "No tags",
       "noDeals": "No deals",
-      "addNotePlaceholder": "Add a note..."
+      "noNotes": "No notes yet",
+      "addNotePlaceholder": "Add a note...",
+      "tabOverview": "Overview",
+      "tabDetails": "Details",
+      "tabNotes": "Notes",
+      "memberSince": "Member since",
+      "noEmail": "No email on file",
+      "customFields": "Custom fields",
+      "noCustomFields": "No custom fields set",
+      "dealValue": "Value",
+      "dealStage": "Stage",
+      "dealCreated": "Created"
     },
     "aiBanner": {
       "pausedTitle": "AI assistant is paused here",
