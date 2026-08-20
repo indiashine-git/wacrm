@@ -2,13 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, ExternalLink, Send, RefreshCw, Plus, X } from "lucide-react";
+import {
+  Loader2,
+  ExternalLink,
+  Send,
+  RefreshCw,
+  Plus,
+  X,
+  LayoutTemplate,
+  CheckCircle2,
+  PauseCircle,
+  Archive,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -38,10 +49,16 @@ interface DraftField {
   inputType: "text" | "number" | "email" | "phone";
 }
 
-const statusColors: Record<string, string> = {
-  PUBLISHED: "bg-emerald-600/20 text-emerald-400 border-emerald-600/30",
-  DRAFT: "bg-slate-600/20 text-slate-400 border-slate-600/30",
-  DEPRECATED: "bg-red-600/20 text-red-400 border-red-600/30",
+const STATUS_COLORS: Record<string, string> = {
+  PUBLISHED: "border-emerald-600/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+  DRAFT: "border-border bg-muted text-muted-foreground",
+  DEPRECATED: "border-border bg-muted/50 text-muted-foreground",
+};
+
+const STATUS_ICONS: Record<string, typeof CheckCircle2> = {
+  PUBLISHED: CheckCircle2,
+  DRAFT: PauseCircle,
+  DEPRECATED: Archive,
 };
 
 const CATEGORIES = [
@@ -206,67 +223,86 @@ export default function MetaFlowsPage() {
     draftFields.filter((f) => f.name.trim() && f.label.trim()).length === 0;
 
   return (
-    <section className="animate-in fade-in-50 space-y-4 duration-200">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-foreground">Flows</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold text-foreground">Flows</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Real Meta WhatsApp Flows — native in-chat forms with actual screens and
             fields, rendered inside WhatsApp itself.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={fetchFlows} disabled={loading}>
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
+          <Button variant="ghost" onClick={fetchFlows} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             Refresh
           </Button>
           <Button onClick={openCreateDialog}>
-            <Plus className="size-4" />
+            <Plus className="h-4 w-4" />
             Create Flow
           </Button>
         </div>
-      </div>
+      </header>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="size-6 animate-spin text-primary" />
+        <div className="flex h-full items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : flows.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-sm text-muted-foreground">No Flows yet.</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Click &quot;Create Flow&quot; to publish your first one.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card/50 px-6 py-16 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+            <LayoutTemplate className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <h2 className="mt-4 text-base font-medium text-foreground">No Flows yet</h2>
+          <p className="mt-1 max-w-md text-sm text-muted-foreground">
+            Publish your first native WhatsApp form to start collecting structured
+            answers straight inside a chat.
+          </p>
+          <Button onClick={openCreateDialog} className="mt-5">
+            <Plus className="h-4 w-4" />
+            Create Flow
+          </Button>
+        </div>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
-          {flows.map((flow) => (
-            <Card key={flow.id}>
-              <CardContent className="flex items-start justify-between pt-4">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium text-foreground">{flow.name}</h3>
-                    <Badge
-                      className={`text-xs border ${statusColors[flow.status] || ""}`}
-                    >
-                      {flow.status}
-                    </Badge>
-                    {flow.categories.map((cat) => (
-                      <span
-                        key={cat}
-                        className="text-[10px] uppercase text-muted-foreground"
-                      >
-                        {cat}
-                      </span>
-                    ))}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {flows.map((flow) => {
+            const StatusIcon = STATUS_ICONS[flow.status] ?? PauseCircle;
+            return (
+              <div
+                key={flow.id}
+                className="flex flex-col rounded-lg border border-border bg-card p-4 transition-colors hover:border-border"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <LayoutTemplate className="h-4 w-4 shrink-0 text-primary" />
+                    <h3 className="truncate text-sm font-semibold text-foreground">
+                      {flow.name}
+                    </h3>
                   </div>
-                  <p className="text-xs text-muted-foreground">ID: {flow.id}</p>
+                  <Badge
+                    variant="outline"
+                    className={cn("shrink-0 gap-1 text-[10px]", STATUS_COLORS[flow.status])}
+                  >
+                    <StatusIcon className="h-3 w-3" />
+                    {flow.status}
+                  </Badge>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+
+                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">
+                  ID: {flow.id}
+                </p>
+
+                <div className="mt-4 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                  {flow.categories.map((cat) => (
+                    <span key={cat} className="uppercase tracking-wide">
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
                   <Button variant="ghost" size="sm" onClick={() => openPreview(flow)}>
-                    <ExternalLink className="size-3.5" />
+                    <ExternalLink className="h-3.5 w-3.5" />
                     Preview
                   </Button>
                   <Button
@@ -280,13 +316,13 @@ export default function MetaFlowsPage() {
                         : undefined
                     }
                   >
-                    <Send className="size-3.5" />
+                    <Send className="h-3.5 w-3.5" />
                     Send
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -497,6 +533,6 @@ export default function MetaFlowsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   );
 }
