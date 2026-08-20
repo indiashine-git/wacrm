@@ -51,6 +51,7 @@ import {
   getRecipientStatus,
 } from '@/lib/broadcast-status';
 import { useTranslations } from 'next-intl';
+import { formatWhatsAppText } from '@/lib/whatsapp/format-text';
 
 interface StatCardProps {
   label: string;
@@ -541,9 +542,8 @@ export default function BroadcastDetailPage() {
               </p>
             )}
             <p className="whitespace-pre-wrap text-sm text-foreground">
-              {renderTemplateBody(
-                template.body_text,
-                recipients[0]?.template_params ?? [],
+              {formatWhatsAppText(
+                renderTemplateBody(template.body_text, recipients[0]?.template_params ?? []),
               )}
             </p>
             {template.footer_text && (
@@ -818,7 +818,7 @@ export default function BroadcastDetailPage() {
                 <TableRow className="border-border hover:bg-transparent">
                   <TableHead className="text-muted-foreground">{t('table.contact')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.phone')}</TableHead>
-                  <TableHead className="text-muted-foreground">{t('table.message')}</TableHead>
+                  <TableHead className="w-28 text-muted-foreground">{t('table.message')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.status')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.sent')}</TableHead>
                   <TableHead className="text-muted-foreground">{t('table.delivered')}</TableHead>
@@ -837,17 +837,15 @@ export default function BroadcastDetailPage() {
                       <TableCell className="text-muted-foreground">
                         {recipient.contact?.phone ?? '-'}
                       </TableCell>
-                      <TableCell className="max-w-xs text-xs">
+                      <TableCell className="w-28 text-xs">
                         {template ? (
                           <button
                             type="button"
                             onClick={() => setPreviewRecipient(recipient)}
-                            className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground hover:underline"
+                            className="flex items-center gap-1 whitespace-nowrap text-muted-foreground hover:text-foreground hover:underline"
                           >
                             <Eye className="h-3 w-3 shrink-0" />
-                            <span className="truncate">
-                              {renderTemplateBody(template.body_text, recipient.template_params ?? [])}
-                            </span>
+                            {t('table.viewMessage')}
                           </button>
                         ) : (
                           '-'
@@ -910,7 +908,7 @@ export default function BroadcastDetailPage() {
                 </p>
               )}
               <p className="whitespace-pre-wrap text-sm text-foreground">
-                {renderTemplateBody(template.body_text, previewRecipient.template_params ?? [])}
+                {formatWhatsAppText(renderTemplateBody(template.body_text, previewRecipient.template_params ?? []))}
               </p>
               {template.footer_text && (
                 <p className="mt-1 text-xs italic text-muted-foreground">

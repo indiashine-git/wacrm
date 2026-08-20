@@ -14,6 +14,8 @@ import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { ResizableContactPanel } from "@/components/inbox/resizable-contact-panel";
+import { ResizableListPanel } from "@/components/inbox/resizable-list-panel";
+import { useIsDesktop } from "@/hooks/use-media-query";
 import { toast } from "sonner";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -603,6 +605,7 @@ function InboxPageInner() {
   // it back to the list. On lg+ both panes render side-by-side as
   // before, unchanged.
   const hasActiveConv = !!activeConversation;
+  const isDesktop = useIsDesktop();
 
   return (
     <div className="-m-4 flex h-[calc(100dvh-3.5rem-4rem-env(safe-area-inset-bottom))] flex-col overflow-hidden sm:-m-6 lg:h-[calc(100dvh-3.5rem)]">
@@ -637,13 +640,25 @@ function InboxPageInner() {
             hasActiveConv ? "hidden lg:flex" : "flex",
           )}
         >
-          <ConversationList
-            activeConversationId={activeConversation?.id ?? null}
-            onSelect={handleSelectConversation}
-            conversations={conversations}
-            onConversationsLoaded={handleConversationsLoaded}
-            resyncToken={resyncToken}
-          />
+          {isDesktop ? (
+            <ResizableListPanel>
+              <ConversationList
+                activeConversationId={activeConversation?.id ?? null}
+                onSelect={handleSelectConversation}
+                conversations={conversations}
+                onConversationsLoaded={handleConversationsLoaded}
+                resyncToken={resyncToken}
+              />
+            </ResizableListPanel>
+          ) : (
+            <ConversationList
+              activeConversationId={activeConversation?.id ?? null}
+              onSelect={handleSelectConversation}
+              conversations={conversations}
+              onConversationsLoaded={handleConversationsLoaded}
+              resyncToken={resyncToken}
+            />
+          )}
         </div>
 
         {/* Center panel: Message thread.

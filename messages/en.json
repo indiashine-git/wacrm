@@ -16,6 +16,7 @@
   },
   "Sidebar": {
     "title": "WATU",
+    "resizeNav": "Resize navigation",
     "dashboard": "Dashboard",
     "inbox": "Inbox",
     "notifications": "Notifications",
@@ -693,6 +694,7 @@
         "contact": "Contact",
         "phone": "Phone",
         "message": "Message",
+        "viewMessage": "View message",
         "status": "Status",
         "sent": "Sent",
         "delivered": "Delivered",

@@ -28,6 +28,13 @@ import {
   Zap,
 } from "lucide-react";
 import type { AccountRole } from "@/lib/auth/roles";
+import { usePanelWidth } from "@/hooks/use-panel-width";
+import { useIsDesktop } from "@/hooks/use-media-query";
+import { ResizeHandle } from "@/components/ui/resize-handle";
+
+const NAV_MIN_WIDTH = 200;
+const NAV_MAX_WIDTH = 360;
+const NAV_DEFAULT_WIDTH = 240;
 
 // Per-role chip metadata used in the sidebar's account strip + the
 // Members tab roster. Keeping this near both consumers in a single
@@ -121,6 +128,13 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const { conversationsWithUnread, totalUnreadMessages } = useTotalUnread();
   const unreadNotifications = useUnreadNotifications();
+  const isDesktop = useIsDesktop();
+  const { width: navWidth, setWidth: setNavWidth, persist: persistNavWidth, widthRef: navWidthRef } = usePanelWidth(
+    "mainNav",
+    NAV_DEFAULT_WIDTH,
+    NAV_MIN_WIDTH,
+    NAV_MAX_WIDTH,
+  );
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -181,11 +195,25 @@ export function Sidebar({ open = false, onClose }: SidebarProps) {
           "fixed inset-y-0 left-0 z-40 flex h-full w-64 flex-col border-r border-border bg-card",
           "transition-transform duration-200 ease-out will-change-transform",
           open ? "translate-x-0" : "-translate-x-full",
-          // Desktop: static, always visible — reset all the mobile framing.
-          "lg:static lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
+          // Desktop: relative (not static) so the resize handle below
+          // can anchor to this element's right edge, always visible.
+          // Width comes from the drag-resizable style below, not a fixed
+          // class, once we know we're on lg+ (isDesktop starts false
+          // during SSR/hydration, so `lg:w-60` is the fallback until then).
+          "lg:relative lg:z-0 lg:w-60 lg:translate-x-0 lg:transition-none",
         )}
+        style={isDesktop ? { width: navWidth } : undefined}
         aria-label="Primary"
       >
+        {isDesktop && (
+          <ResizeHandle
+            edge="right"
+            getWidth={() => navWidthRef.current}
+            onResize={setNavWidth}
+            onResizeEnd={() => persistNavWidth(navWidthRef.current)}
+            label={t("resizeNav")}
+          />
+        )}
         {/* Logo row. On mobile we put a close button here; on desktop the
             close button is hidden since the sidebar is always-visible. */}
         <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border px-4">
