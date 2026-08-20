@@ -43,16 +43,20 @@ export async function loadMetrics(db: DB): Promise<MetricsBundle> {
     messagesToday,
     messagesYesterday,
   ] = await Promise.all([
-    db.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+    // "Active" = still needs attention (open OR pending triage) — NOT
+    // literally status='open'. Real conversations mostly sit in
+    // 'pending' day-to-day, so the strict 'open' filter was
+    // undercounting to near-zero even with real live conversations.
+    db.from('conversations').select('id', { count: 'exact', head: true }).neq('status', 'closed'),
     db
       .from('conversations')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'open')
+      .neq('status', 'closed')
       .gte('created_at', todayStart),
     db
       .from('conversations')
       .select('id', { count: 'exact', head: true })
-      .eq('status', 'open')
+      .neq('status', 'closed')
       .gte('created_at', yesterdayStart)
       .lt('created_at', todayStart),
     db.from('contacts').select('id', { count: 'exact', head: true }).gte('created_at', todayStart),

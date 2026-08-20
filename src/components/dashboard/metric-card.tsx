@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react'
 import type { ComponentType } from 'react'
 import { cn } from '@/lib/utils'
@@ -19,11 +20,15 @@ interface MetricCardProps {
   }
   /** Used instead of `delta` when the metric has a static subtitle. */
   subtitle?: string
+  /** Where clicking the card navigates — e.g. the Inbox for
+   *  "Active Conversations", Pipelines for "Open Deals Value". Omit
+   *  only for metrics with no sensible drill-down target. */
+  href?: string
 }
 
-export function MetricCard({ title, value, icon: Icon, delta, subtitle }: MetricCardProps) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5">
+export function MetricCard({ title, value, icon: Icon, delta, subtitle, href }: MetricCardProps) {
+  const body = (
+    <>
       <div className="flex items-start justify-between">
         <p className="text-sm font-medium text-muted-foreground">{title}</p>
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
@@ -36,8 +41,21 @@ export function MetricCard({ title, value, icon: Icon, delta, subtitle }: Metric
       {delta ? <DeltaRow sign={delta.sign} label={delta.label} /> : subtitle ? (
         <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>
       ) : null}
-    </div>
+    </>
   )
+
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block rounded-xl border border-border bg-card p-5 transition-colors hover:border-primary/40 hover:bg-muted/40"
+      >
+        {body}
+      </Link>
+    )
+  }
+
+  return <div className="rounded-xl border border-border bg-card p-5">{body}</div>
 }
 
 function DeltaRow({ sign, label }: { sign: number; label: string }) {
