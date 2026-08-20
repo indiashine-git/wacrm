@@ -228,6 +228,27 @@ export async function getUserBusinesses(
   return data.data ?? []
 }
 
+export interface ListOwnedCatalogsArgs {
+  businessId: string
+  accessToken: string
+}
+
+/** GET /{business_id}/owned_product_catalogs -- every catalog this Business Manager owns. */
+export async function listOwnedCatalogs(
+  args: ListOwnedCatalogsArgs
+): Promise<{ id: string; name: string }[]> {
+  const { businessId, accessToken } = args
+  const url = `${META_API_BASE}/${businessId}/owned_product_catalogs?fields=id,name`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to list owned catalogs.')
+  }
+  const data = (await response.json()) as { data?: { id: string; name: string }[] }
+  return data.data ?? []
+}
+
 export interface CreateProductCatalogArgs {
   businessId: string
   accessToken: string

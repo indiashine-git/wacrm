@@ -6,7 +6,7 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import { debugAccessToken } from '@/lib/whatsapp/meta-api'
+import { debugAccessToken, getUserBusinesses, listOwnedCatalogs } from '@/lib/whatsapp/meta-api'
 
 /**
  * Diagnostic: what scopes does the account's stored WhatsApp access
@@ -27,7 +27,18 @@ export async function GET() {
     }
     const accessToken = decrypt(config.access_token)
     const result = await debugAccessToken(accessToken)
-    return NextResponse.json(result)
+
+    const businesses = await getUserBusinesses({ accessToken })
+    const catalogsByBusiness = await Promise.all(
+      businesses.map(async (b) => ({
+        business: b,
+        catalogs: await listOwnedCatalogs({ businessId: b.id, accessToken }).catch((e) => [
+          { id: 'error', name: e instanceof Error ? e.message : String(e) },
+        ]),
+      })),
+    )
+
+    return NextResponse.json({ ...result, businesses, catalogsByBusiness })
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       return toErrorResponse(error)
