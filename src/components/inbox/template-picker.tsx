@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { MessageTemplate } from "@/types";
+import type { Contact, MessageTemplate } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +43,19 @@ interface TemplatePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (template: MessageTemplate, values: TemplateSendValues) => void;
+  /** This thread's contact -- lets each placeholder prefill from their real name/phone/email in one click. */
+  contact?: Contact | null;
+}
+
+/** Contact fields offered as one-click prefills for a placeholder -- only ones this contact actually has. */
+function contactPrefillOptions(contact: Contact | null | undefined): { label: string; value: string }[] {
+  if (!contact) return [];
+  const options: { label: string; value: string }[] = [];
+  if (contact.name) options.push({ label: "Name", value: contact.name });
+  if (contact.phone) options.push({ label: "Phone", value: contact.phone });
+  if (contact.email) options.push({ label: "Email", value: contact.email });
+  if (contact.company) options.push({ label: "Company", value: contact.company });
+  return options;
 }
 
 function renderBodyPreview(body: string, params: string[]): string {
@@ -83,12 +96,38 @@ function collectVariableSlots(template: MessageTemplate): {
   return { bodyVars, headerVarCount, urlButtonSlots };
 }
 
+function PrefillChips({
+  options,
+  onPick,
+}: {
+  options: { label: string; value: string }[];
+  onPick: (value: string) => void;
+}) {
+  if (options.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {options.map((opt) => (
+        <button
+          key={opt.label}
+          type="button"
+          onClick={() => onPick(opt.value)}
+          className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary"
+        >
+          Use {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function TemplatePicker({
   open,
   onOpenChange,
   onSelect,
+  contact,
 }: TemplatePickerProps) {
   const t = useTranslations("Inbox.templatePicker");
+  const prefillOptions = useMemo(() => contactPrefillOptions(contact), [contact]);
 
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -358,6 +397,7 @@ export function TemplatePicker({
                   placeholder={t("headerValuePlaceholder")}
                   className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
                 />
+                <PrefillChips options={prefillOptions} onPick={setHeaderText} />
               </div>
             )}
             {slots?.bodyVars.map((v, i) => (
@@ -372,6 +412,14 @@ export function TemplatePicker({
                   }}
                   placeholder={t("bodyValuePlaceholder", { val: `{{${v}}}` })}
                   className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
+                />
+                <PrefillChips
+                  options={prefillOptions}
+                  onPick={(value) => {
+                    const next = [...params];
+                    next[i] = value;
+                    setParams(next);
+                  }}
                 />
               </div>
             ))}
@@ -390,6 +438,10 @@ export function TemplatePicker({
                   }
                   placeholder={t("urlSuffixValuePlaceholder")}
                   className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
+                />
+                <PrefillChips
+                  options={prefillOptions}
+                  onPick={(value) => setButtonParams((prev) => ({ ...prev, [slot.index]: value }))}
                 />
                 <p className="text-[10px] text-muted-foreground break-all">
                   {t("finalUrl", { url: slot.url.replace(/\{\{1\}\}/g, buttonParams[slot.index] || "{{1}}") })}

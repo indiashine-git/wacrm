@@ -1209,6 +1209,7 @@ export function MessageThread({
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
+        contact={contact}
       />
 
       {/* Full-size viewer for the thread's images/videos. Renders nothing
