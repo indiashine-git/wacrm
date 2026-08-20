@@ -55,9 +55,17 @@ interface WhatsAppMessage {
    * to advance the per-contact run.
    */
   interactive?: {
-    type: 'button_reply' | 'list_reply'
+    type: 'button_reply' | 'list_reply' | 'nfm_reply'
     button_reply?: { id: string; title: string }
     list_reply?: { id: string; title: string; description?: string }
+    /**
+     * Set when the customer submits a real Meta WhatsApp Flow (native
+     * in-chat form) — a different envelope from button_reply/list_reply.
+     * `response_json` is a JSON-encoded STRING (not an object) containing
+     * whatever fields the Flow's screens collected, keyed by each
+     * component's `name`.
+     */
+    nfm_reply?: { name?: string; body?: string; response_json: string }
   }
   /**
    * Set when the customer taps a QUICK_REPLY button on a *template*
@@ -1069,6 +1077,28 @@ async function parseMessageContent(
           interactiveReplyId: reply.id,
         }
       }
+
+      // Real Meta WhatsApp Flow submission — the customer filled out
+      // the native in-chat form and hit Submit. response_json is a
+      // JSON-encoded STRING keyed by each screen component's `name`;
+      // render it as readable "field: value" lines rather than raw
+      // JSON so the inbox bubble is legible, and keep the raw payload
+      // in contentText's tail for anyone who needs the exact values.
+      const nfm = message.interactive?.nfm_reply
+      if (nfm?.response_json) {
+        let rendered = nfm.response_json
+        try {
+          const fields = JSON.parse(nfm.response_json) as Record<string, unknown>
+          rendered = Object.entries(fields)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join('\n')
+        } catch {
+          // Malformed JSON from Meta (shouldn't happen) — fall back to
+          // showing the raw string rather than dropping the submission.
+        }
+        return { ...empty, contentText: `[Form submitted]\n${rendered}` }
+      }
+
       return { ...empty, contentText: '[Interactive reply]' }
     }
 

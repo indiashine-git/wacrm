@@ -794,6 +794,127 @@ export async function createTemplateFromLibrary(
   }
 }
 
+// ============================================================
+// WhatsApp Flows (Meta's native in-chat forms — NOT the wacrm
+// "Chatbot" feature, which is a chat-message state machine built
+// from ordinary interactive list/button messages. A real Flow
+// renders as its own screen inside WhatsApp: text inputs, dropdowns,
+// checkboxes, a routing_model between screens, defined by a single
+// Flow JSON document. See:
+// https://developers.facebook.com/documentation/business-messaging/whatsapp/flows
+// ============================================================
+
+export interface CreateFlowArgs {
+  wabaId: string
+  accessToken: string
+  name: string
+  categories: string[]
+  /** The Flow JSON document (version, screens, routing_model). */
+  flowJson: Record<string, unknown>
+  /** Publish immediately instead of leaving it in DRAFT. */
+  publish?: boolean
+}
+
+export interface CreateFlowResult {
+  id: string
+}
+
+/**
+ * Create (and optionally publish) a static WhatsApp Flow in one call.
+ * Static flows (no endpoint_uri) need no data-exchange backend —
+ * every screen navigates by static routing_model / `complete` action.
+ */
+export async function createFlow(args: CreateFlowArgs): Promise<CreateFlowResult> {
+  const { wabaId, accessToken, name, categories, flowJson, publish } = args
+  const url = `${META_API_BASE_LIBRARY}/${wabaId}/flows`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      name,
+      categories,
+      flow_json: JSON.stringify(flowJson),
+      ...(publish ? { publish: true } : {}),
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  if (!data?.id) {
+    throw new Error('Meta accepted the flow but returned no id.')
+  }
+  return { id: String(data.id) }
+}
+
+export interface SendFlowMessageArgs {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  flowId: string
+  /** Button label the customer taps to open the form. Meta caps at 30 chars, no emoji. */
+  flowCta: string
+  /** The Flow's entry screen id (from the Flow JSON's `screens[0].id`). */
+  screen: string
+  headerText?: string
+  bodyText: string
+  footerText?: string
+  /** Unique per send — lets the completion webhook correlate the submission back to this send. */
+  flowToken: string
+}
+
+/**
+ * Send a real Meta WhatsApp Flow — opens as a native in-chat form,
+ * not a chat message. Distinct from sendInteractiveButtons/List.
+ */
+export async function sendFlowMessage(args: SendFlowMessageArgs): Promise<MetaSendResult> {
+  const {
+    phoneNumberId, accessToken, to, flowId, flowCta, screen,
+    headerText, bodyText, footerText, flowToken,
+  } = args
+  const interactive: Record<string, unknown> = {
+    type: 'flow',
+    body: { text: bodyText },
+    action: {
+      name: 'flow',
+      parameters: {
+        flow_message_version: '3',
+        flow_token: flowToken,
+        flow_id: flowId,
+        flow_cta: flowCta,
+        flow_action: 'navigate',
+        flow_action_payload: { screen },
+      },
+    },
+  }
+  if (headerText) interactive.header = { type: 'text', text: headerText }
+  if (footerText) interactive.footer = { text: footerText }
+
+  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'interactive',
+      interactive,
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  return { messageId: data.messages[0].id }
+}
+
 export interface DeleteMessageTemplateArgs {
   wabaId: string
   accessToken: string
