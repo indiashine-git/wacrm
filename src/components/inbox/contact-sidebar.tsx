@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type {
@@ -27,6 +26,7 @@ import {
   ListChecks,
   Trash2,
   Pencil,
+  Megaphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -355,6 +355,21 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
               {tSidebar("memberSince")} {format(new Date(contact.created_at), "MMM yyyy")}
             </span>
           </div>
+          {/* Click-to-WhatsApp ad attribution -- real data from Meta's
+              own referral field on the message that started this
+              chat, not something wacrm infers. */}
+          {contact.ad_referral && (
+            <div
+              className="flex items-start gap-2 rounded-lg bg-primary/5 px-2 py-1.5 text-xs text-muted-foreground"
+              title={contact.ad_referral.source_url}
+            >
+              <Megaphone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="truncate">
+                Came from a Meta ad
+                {contact.ad_referral.headline ? `: "${contact.ad_referral.headline}"` : ""}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

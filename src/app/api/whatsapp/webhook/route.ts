@@ -78,6 +78,23 @@ interface WhatsAppMessage {
   button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
+  /**
+   * Set by Meta on the first inbound message of a chat that started
+   * from a click-to-WhatsApp ad or Facebook/Instagram post — real ad
+   * attribution, not something wacrm computes. `source_id` is the ad
+   * id, `ctwa_clid` the click id Meta uses for its own ads reporting.
+   */
+  referral?: {
+    source_url?: string
+    source_type?: string
+    source_id?: string
+    headline?: string
+    body?: string
+    media_type?: string
+    image_url?: string
+    video_url?: string
+    ctwa_clid?: string
+  }
 }
 
 interface WhatsAppWebhookEntry {
@@ -608,6 +625,19 @@ async function processMessage(
   )
   if (!contactOutcome) return
   const contactRecord = contactOutcome.contact
+
+  // Click-to-WhatsApp ad attribution — Meta only sends `referral` on
+  // the message that actually started the chat from the ad, so this
+  // fires at most once per contact. `.is('ad_referral', null)` makes
+  // it first-touch: a contact who clicked a second ad later keeps
+  // whichever ad originally brought them in.
+  if (message.referral) {
+    await supabaseAdmin()
+      .from('contacts')
+      .update({ ad_referral: message.referral })
+      .eq('id', contactRecord.id)
+      .is('ad_referral', null)
+  }
 
   // Find or create conversation
   const convResult = await findOrCreateConversation(

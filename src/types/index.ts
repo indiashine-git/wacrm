@@ -108,6 +108,17 @@ export interface Contact {
   email?: string;
   company?: string;
   avatar_url?: string;
+  /** Click-to-WhatsApp ad that started this contact's first chat, set
+   *  by the webhook from Meta's own `referral` field (migration 048).
+   *  First-touch only -- null if they didn't come from an ad. */
+  ad_referral?: {
+    source_url?: string;
+    source_type?: string;
+    source_id?: string;
+    headline?: string;
+    body?: string;
+    ctwa_clid?: string;
+  } | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the
