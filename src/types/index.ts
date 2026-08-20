@@ -166,6 +166,18 @@ export interface ContactNote {
   created_at: string;
 }
 
+export interface ContactTask {
+  id: string;
+  contact_id: string;
+  created_by: string;
+  assigned_to: string | null;
+  title: string;
+  due_at: string | null;
+  status: 'open' | 'done';
+  created_at: string;
+  completed_at: string | null;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

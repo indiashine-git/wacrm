@@ -7,6 +7,7 @@ import type {
   Contact,
   Deal,
   ContactNote,
+  ContactTask,
   Tag,
   CustomField,
   ContactCustomValue,
@@ -27,6 +28,7 @@ import {
   Trash2,
   Pencil,
   Megaphone,
+  ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,6 +64,10 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [copied, setCopied] = useState(false);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
+  const [tasks, setTasks] = useState<ContactTask[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDue, setNewTaskDue] = useState("");
+  const [addingTask, setAddingTask] = useState(false);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [customValues, setCustomValues] = useState<ContactCustomValue[]>([]);
@@ -95,7 +101,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes] = await Promise.all([
+    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes, tasksRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -118,10 +124,17 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         .from("contact_custom_values")
         .select("*")
         .eq("contact_id", contact.id),
+      supabase
+        .from("contact_tasks")
+        .select("*")
+        .eq("contact_id", contact.id)
+        .order("status", { ascending: true })
+        .order("due_at", { ascending: true, nullsFirst: false }),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
+    if (tasksRes.data) setTasks(tasksRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -189,6 +202,60 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
       return;
     }
     setNotes((prev) => prev.filter((n) => n.id !== noteId));
+  }, []);
+
+  const handleAddTask = useCallback(async () => {
+    if (!contact || !accountId || !newTaskTitle.trim()) return;
+    setAddingTask(true);
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from("contact_tasks")
+      .insert({
+        contact_id: contact.id,
+        account_id: accountId,
+        created_by: user?.id,
+        title: newTaskTitle.trim(),
+        due_at: newTaskDue ? new Date(newTaskDue).toISOString() : null,
+      })
+      .select()
+      .single();
+    if (!error && data) {
+      setTasks((prev) => [...prev, data]);
+      setNewTaskTitle("");
+      setNewTaskDue("");
+    } else {
+      toast.error("Failed to add task");
+    }
+    setAddingTask(false);
+  }, [contact, accountId, newTaskTitle, newTaskDue]);
+
+  const handleToggleTask = useCallback(async (task: ContactTask) => {
+    const nextStatus = task.status === "open" ? "done" : "open";
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("contact_tasks")
+      .update({ status: nextStatus, completed_at: nextStatus === "done" ? new Date().toISOString() : null })
+      .eq("id", task.id);
+    if (error) {
+      toast.error("Failed to update task");
+      return;
+    }
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus, completed_at: nextStatus === "done" ? new Date().toISOString() : null } : t)),
+    );
+  }, []);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    const supabase = createClient();
+    const { error } = await supabase.from("contact_tasks").delete().eq("id", taskId);
+    if (error) {
+      toast.error("Failed to delete task");
+      return;
+    }
+    setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }, []);
 
   // Every field definition, not just filled ones -- so there's
@@ -383,6 +450,9 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
           </TabsTrigger>
           <TabsTrigger value="notes" className="flex-1 text-xs">
             {tSidebar("tabNotes")}
+          </TabsTrigger>
+          <TabsTrigger value="tasks" className="flex-1 text-xs">
+            {tSidebar("tabTasks")}
           </TabsTrigger>
         </TabsList>
 
@@ -640,6 +710,82 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                     </p>
                   </div>
                 ))
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="tasks" className="space-y-3 p-4">
+            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <ClipboardList className="h-3 w-3" />
+              {tSidebar("tasks")}
+            </div>
+            <div className="space-y-1.5">
+              <Input
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
+                placeholder={tSidebar("addTaskPlaceholder")}
+                className="h-8 text-xs"
+              />
+              <div className="flex gap-2">
+                <Input
+                  type="datetime-local"
+                  value={newTaskDue}
+                  onChange={(e) => setNewTaskDue(e.target.value)}
+                  className="h-8 flex-1 text-xs"
+                />
+                <Button
+                  size="sm"
+                  className="h-8 bg-primary px-2 hover:bg-primary/90"
+                  onClick={handleAddTask}
+                  disabled={!newTaskTitle.trim() || addingTask}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {tasks.length === 0 ? (
+                <p className="px-1 text-xs text-muted-foreground">{tSidebar("noTasks")}</p>
+              ) : (
+                tasks.map((task) => {
+                  const overdue =
+                    task.status === "open" && task.due_at && new Date(task.due_at) < new Date();
+                  return (
+                    <div
+                      key={task.id}
+                      className="group flex items-start gap-2 rounded-lg bg-muted px-3 py-2"
+                    >
+                      <Checkbox
+                        checked={task.status === "done"}
+                        onCheckedChange={() => handleToggleTask(task)}
+                        className="mt-0.5"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-xs ${task.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}
+                        >
+                          {task.title}
+                        </p>
+                        {task.due_at && (
+                          <p className={`mt-0.5 text-[10px] ${overdue ? "text-red-500" : "text-muted-foreground"}`}>
+                            {overdue ? tSidebar("taskOverdue") : tSidebar("taskDue")}{" "}
+                            {format(new Date(task.due_at), "MMM d, yyyy HH:mm")}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTask(task.id)}
+                        aria-label="Delete task"
+                        className="shrink-0 text-muted-foreground opacity-0 hover:text-red-500 group-hover:opacity-100"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
           </TabsContent>
