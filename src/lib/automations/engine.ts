@@ -176,6 +176,26 @@ export async function resumePendingExecution(pending: {
 async function executeAutomation(automation: Automation, input: DispatchInput) {
   const db = supabaseAdmin()
 
+  // Supersede this contact's earlier still-pending run of this same
+  // automation before starting a new one. Without this, every matching
+  // event (e.g. every inbound message for a `new_message_received`
+  // trigger) queues its own independent `wait` timer with no
+  // cancellation — a contact who messages repeatedly ends up with many
+  // parallel pending reminders that all fire at once whenever the cron
+  // next drains them. Marking as 'failed' (not a real failure) is a
+  // no-op for the cron, which only ever selects status='pending'.
+  if (input.contactId) {
+    const { error: supersedeErr } = await db
+      .from('automation_pending_executions')
+      .update({ status: 'failed' })
+      .eq('automation_id', automation.id)
+      .eq('contact_id', input.contactId)
+      .eq('status', 'pending')
+    if (supersedeErr) {
+      console.error('[automations] failed to supersede stale pending runs:', supersedeErr)
+    }
+  }
+
   const { data: log, error: logErr } = await db
     .from('automation_logs')
     .insert({
