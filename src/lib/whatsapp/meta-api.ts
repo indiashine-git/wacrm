@@ -301,6 +301,33 @@ export async function connectCatalogToWaba(args: ConnectCatalogToWabaArgs): Prom
   }
 }
 
+export interface ListWabaCatalogsArgs {
+  wabaId: string
+  accessToken: string
+}
+
+/**
+ * GET /{waba_id}/product_catalogs -- catalog(s) actually connected to
+ * this WhatsApp Business Account. Uses whatsapp_business_management
+ * (a scope the token already has) rather than catalog_management, so
+ * this can succeed even when the generic Business Manager catalog
+ * calls fail on permission grounds.
+ */
+export async function listWabaCatalogs(
+  args: ListWabaCatalogsArgs
+): Promise<{ id: string; name: string }[]> {
+  const { wabaId, accessToken } = args
+  const url = `${META_API_BASE}/${wabaId}/product_catalogs?fields=id,name`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to list catalogs connected to this WhatsApp account.')
+  }
+  const data = (await response.json()) as { data?: { id: string; name: string }[] }
+  return data.data ?? []
+}
+
 // ============================================================
 // Cloud API registration (subscription for inbound webhooks)
 // ============================================================
