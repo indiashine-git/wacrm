@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { Contact, MessageTemplate } from "@/types";
+import type { Contact, CustomField, MessageTemplate } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,19 +43,41 @@ interface TemplatePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (template: MessageTemplate, values: TemplateSendValues) => void;
-  /** This thread's contact -- lets each placeholder prefill from their real name/phone/email in one click. */
+  /** This thread's contact -- lets each placeholder map to their real name/phone/email/custom fields, same as the broadcast wizard's Personalize step. */
   contact?: Contact | null;
 }
 
-/** Contact fields offered as one-click prefills for a placeholder -- only ones this contact actually has. */
-function contactPrefillOptions(contact: Contact | null | undefined): { label: string; value: string }[] {
-  if (!contact) return [];
-  const options: { label: string; value: string }[] = [];
-  if (contact.name) options.push({ label: "Name", value: contact.name });
-  if (contact.phone) options.push({ label: "Phone", value: contact.phone });
-  if (contact.email) options.push({ label: "Email", value: contact.email });
-  if (contact.company) options.push({ label: "Company", value: contact.company });
-  return options;
+type VariableType = "static" | "field" | "custom_field";
+
+interface VariableMapping {
+  type: VariableType;
+  /** Static text, or the contact-field key ("name"/"phone"/"email"/"company"), or a custom_field id. */
+  value: string;
+}
+
+const CONTACT_FIELDS: { value: keyof Contact; label: string }[] = [
+  { value: "name", label: "Name" },
+  { value: "phone", label: "Phone" },
+  { value: "email", label: "Email" },
+  { value: "company", label: "Company" },
+];
+
+function emptyMapping(): VariableMapping {
+  return { type: "static", value: "" };
+}
+
+/** Resolve a mapping to its final string value for this contact -- mirrors the broadcast wizard's substitution logic. */
+function resolveMapping(
+  mapping: VariableMapping,
+  contact: Contact | null | undefined,
+  customValues: Map<string, string>,
+): string {
+  if (mapping.type === "static") return mapping.value;
+  if (mapping.type === "field") {
+    const raw = contact?.[mapping.value as keyof Contact];
+    return typeof raw === "string" ? raw : "";
+  }
+  return customValues.get(mapping.value) ?? "";
 }
 
 function renderBodyPreview(body: string, params: string[]): string {
@@ -96,26 +118,79 @@ function collectVariableSlots(template: MessageTemplate): {
   return { bodyVars, headerVarCount, urlButtonSlots };
 }
 
-function PrefillChips({
-  options,
-  onPick,
+/** Type + Value mapping row -- same shape as the broadcast wizard's Personalize step, one contact resolved instead of many. */
+function MappingRow({
+  label,
+  mapping,
+  onChange,
+  customFields,
+  staticPlaceholder,
 }: {
-  options: { label: string; value: string }[];
-  onPick: (value: string) => void;
+  label: string;
+  mapping: VariableMapping;
+  onChange: (patch: Partial<VariableMapping>) => void;
+  customFields: CustomField[];
+  staticPlaceholder: string;
 }) {
-  if (options.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1">
-      {options.map((opt) => (
-        <button
-          key={opt.label}
-          type="button"
-          onClick={() => onPick(opt.value)}
-          className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:border-primary/40 hover:text-primary"
+    <div className="space-y-1.5 rounded-md border border-border bg-background/50 p-3">
+      <Label className="text-xs text-popover-foreground">{label}</Label>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Select
+          value={mapping.type}
+          onValueChange={(val) => onChange({ type: val as VariableType, value: "" })}
         >
-          Use {opt.label}
-        </button>
-      ))}
+          <SelectTrigger className="w-full border-border bg-muted text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="border-border bg-popover">
+            <SelectItem value="static" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+              Static Value
+            </SelectItem>
+            <SelectItem value="field" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+              Contact Field
+            </SelectItem>
+            <SelectItem value="custom_field" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+              Custom Field
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        {mapping.type === "static" ? (
+          <Input
+            value={mapping.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder={staticPlaceholder}
+            className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
+          />
+        ) : mapping.type === "field" ? (
+          <Select value={mapping.value || undefined} onValueChange={(val) => onChange({ value: val || "" })}>
+            <SelectTrigger className="w-full border-border bg-muted text-foreground">
+              <SelectValue placeholder="Select contact field…" />
+            </SelectTrigger>
+            <SelectContent className="border-border bg-popover">
+              {CONTACT_FIELDS.map((f) => (
+                <SelectItem key={f.value} value={f.value} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {f.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Select value={mapping.value || undefined} onValueChange={(val) => onChange({ value: val || "" })}>
+            <SelectTrigger className="w-full border-border bg-muted text-foreground">
+              <SelectValue placeholder={customFields.length === 0 ? "No custom fields" : "Select custom field…"} />
+            </SelectTrigger>
+            <SelectContent className="border-border bg-popover">
+              {customFields.map((f) => (
+                <SelectItem key={f.id} value={f.id} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                  {f.field_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
     </div>
   );
 }
@@ -127,7 +202,6 @@ export function TemplatePicker({
   contact,
 }: TemplatePickerProps) {
   const t = useTranslations("Inbox.templatePicker");
-  const prefillOptions = useMemo(() => contactPrefillOptions(contact), [contact]);
 
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,9 +209,56 @@ export function TemplatePicker({
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sort, setSort] = useState<"newest" | "oldest" | "name">("newest");
   const [selected, setSelected] = useState<MessageTemplate | null>(null);
-  const [params, setParams] = useState<string[]>([]);
-  const [headerText, setHeaderText] = useState<string>("");
-  const [buttonParams, setButtonParams] = useState<Record<number, string>>({});
+  const [headerMapping, setHeaderMapping] = useState<VariableMapping>(emptyMapping());
+  const [bodyMappings, setBodyMappings] = useState<VariableMapping[]>([]);
+  const [buttonMappings, setButtonMappings] = useState<Record<number, VariableMapping>>({});
+
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+  const [customValues, setCustomValues] = useState<Map<string, string>>(new Map());
+
+  // This contact's custom-field values -- lets a placeholder map to
+  // "Custom Field" the same way the broadcast wizard's Personalize step
+  // does, not just the built-in name/phone/email/company.
+  useEffect(() => {
+    if (!open || !contact) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const [fieldsRes, valuesRes] = await Promise.all([
+        supabase.from("custom_fields").select("*").order("field_name"),
+        supabase
+          .from("contact_custom_values")
+          .select("custom_field_id, value")
+          .eq("contact_id", contact.id),
+      ]);
+      if (cancelled) return;
+      setCustomFields(fieldsRes.data ?? []);
+      const map = new Map<string, string>();
+      for (const row of valuesRes.data ?? []) {
+        map.set(row.custom_field_id, row.value ?? "");
+      }
+      setCustomValues(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, contact]);
+
+  const resolvedHeaderText = useMemo(
+    () => resolveMapping(headerMapping, contact, customValues),
+    [headerMapping, contact, customValues],
+  );
+  const resolvedParams = useMemo(
+    () => bodyMappings.map((m) => resolveMapping(m, contact, customValues)),
+    [bodyMappings, contact, customValues],
+  );
+  const resolvedButtonParams = useMemo(() => {
+    const out: Record<number, string> = {};
+    for (const [idx, mapping] of Object.entries(buttonMappings)) {
+      out[Number(idx)] = resolveMapping(mapping, contact, customValues);
+    }
+    return out;
+  }, [buttonMappings, contact, customValues]);
 
   useEffect(() => {
     if (!open) return;
@@ -185,9 +306,9 @@ export function TemplatePicker({
 
   function resetSelection() {
     setSelected(null);
-    setParams([]);
-    setHeaderText("");
-    setButtonParams({});
+    setBodyMappings([]);
+    setHeaderMapping(emptyMapping());
+    setButtonMappings({});
   }
 
   function handleOpenChange(next: boolean) {
@@ -207,18 +328,18 @@ export function TemplatePicker({
       return;
     }
     setSelected(template);
-    setParams(new Array(slots.bodyVars.length).fill(""));
-    setHeaderText("");
-    setButtonParams({});
+    setBodyMappings(new Array(slots.bodyVars.length).fill(null).map(emptyMapping));
+    setHeaderMapping(emptyMapping());
+    setButtonMappings({});
   }
 
   function confirm() {
     if (!selected) return;
-    const values: TemplateSendValues = { body: params };
-    if (headerText.trim()) values.headerText = headerText.trim();
-    if (Object.keys(buttonParams).length > 0) {
+    const values: TemplateSendValues = { body: resolvedParams.map((v) => v.trim()) };
+    if (resolvedHeaderText.trim()) values.headerText = resolvedHeaderText.trim();
+    if (Object.keys(resolvedButtonParams).length > 0) {
       values.buttonParams = Object.fromEntries(
-        Object.entries(buttonParams).map(([k, v]) => [Number(k), v.trim()]),
+        Object.entries(resolvedButtonParams).map(([k, v]) => [Number(k), v.trim()]),
       );
     }
     onSelect(selected, values);
@@ -256,11 +377,24 @@ export function TemplatePicker({
   const canConfirm =
     !!selected &&
     !!slots &&
-    slots.bodyVars.every((_, i) => (params[i] ?? "").trim().length > 0) &&
-    (slots.headerVarCount === 0 || headerText.trim().length > 0) &&
+    slots.bodyVars.every((_, i) => (resolvedParams[i] ?? "").trim().length > 0) &&
+    (slots.headerVarCount === 0 || resolvedHeaderText.trim().length > 0) &&
     slots.urlButtonSlots.every(
-      (s) => (buttonParams[s.index] ?? "").trim().length > 0,
+      (s) => (resolvedButtonParams[s.index] ?? "").trim().length > 0,
     );
+
+  function updateHeaderMapping(patch: Partial<VariableMapping>) {
+    setHeaderMapping((prev) => ({ ...prev, ...patch }));
+  }
+  function updateBodyMapping(i: number, patch: Partial<VariableMapping>) {
+    setBodyMappings((prev) => prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)));
+  }
+  function updateButtonMapping(index: number, patch: Partial<VariableMapping>) {
+    setButtonMappings((prev) => ({
+      ...prev,
+      [index]: { ...(prev[index] ?? emptyMapping()), ...patch },
+    }));
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -378,7 +512,7 @@ export function TemplatePicker({
             <div className="rounded-md border border-border bg-background/50 p-3">
               <p className="mb-1 text-xs text-muted-foreground">{t("preview")}</p>
               <p className="whitespace-pre-wrap text-sm text-popover-foreground">
-                {formatWhatsAppText(renderBodyPreview(selected.body_text, params))}
+                {formatWhatsAppText(renderBodyPreview(selected.body_text, resolvedParams))}
               </p>
               {selected.footer_text && (
                 <p className="mt-2 text-xs italic text-muted-foreground">
@@ -387,64 +521,37 @@ export function TemplatePicker({
               )}
             </div>
             {slots && slots.headerVarCount > 0 && (
-              <div className="space-y-1">
-                <Label className="text-xs text-popover-foreground">
-                  {`Header {{1}}`}
-                </Label>
-                <Input
-                  value={headerText}
-                  onChange={(e) => setHeaderText(e.target.value)}
-                  placeholder={t("headerValuePlaceholder")}
-                  className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
-                />
-                <PrefillChips options={prefillOptions} onPick={setHeaderText} />
-              </div>
+              <MappingRow
+                label="Header {{1}}"
+                mapping={headerMapping}
+                onChange={updateHeaderMapping}
+                customFields={customFields}
+                staticPlaceholder={t("headerValuePlaceholder")}
+              />
             )}
             {slots?.bodyVars.map((v, i) => (
-              <div key={v} className="space-y-1">
-                <Label className="text-xs text-popover-foreground">{`Body {{${v}}}`}</Label>
-                <Input
-                  value={params[i] ?? ""}
-                  onChange={(e) => {
-                    const next = [...params];
-                    next[i] = e.target.value;
-                    setParams(next);
-                  }}
-                  placeholder={t("bodyValuePlaceholder", { val: `{{${v}}}` })}
-                  className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
-                />
-                <PrefillChips
-                  options={prefillOptions}
-                  onPick={(value) => {
-                    const next = [...params];
-                    next[i] = value;
-                    setParams(next);
-                  }}
-                />
-              </div>
+              <MappingRow
+                key={v}
+                label={`Body {{${v}}}`}
+                mapping={bodyMappings[i] ?? emptyMapping()}
+                onChange={(patch) => updateBodyMapping(i, patch)}
+                customFields={customFields}
+                staticPlaceholder={t("bodyValuePlaceholder", { val: `{{${v}}}` })}
+              />
             ))}
             {slots?.urlButtonSlots.map((slot) => (
               <div key={slot.index} className="space-y-1">
-                <Label className="text-xs text-popover-foreground">
-                  {`URL button "${slot.text}" — value for `}{`{{1}}`}
-                </Label>
-                <Input
-                  value={buttonParams[slot.index] ?? ""}
-                  onChange={(e) =>
-                    setButtonParams((prev) => ({
-                      ...prev,
-                      [slot.index]: e.target.value,
-                    }))
-                  }
-                  placeholder={t("urlSuffixValuePlaceholder")}
-                  className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
-                />
-                <PrefillChips
-                  options={prefillOptions}
-                  onPick={(value) => setButtonParams((prev) => ({ ...prev, [slot.index]: value }))}
+                <MappingRow
+                  label={`URL button "${slot.text}" — value for {{1}}`}
+                  mapping={buttonMappings[slot.index] ?? emptyMapping()}
+                  onChange={(patch) => updateButtonMapping(slot.index, patch)}
+                  customFields={customFields}
+                  staticPlaceholder={t("urlSuffixValuePlaceholder")}
                 />
                 <p className="text-[10px] text-muted-foreground break-all">
-                  {t("finalUrl", { url: slot.url.replace(/\{\{1\}\}/g, buttonParams[slot.index] || "{{1}}") })}
+                  {t("finalUrl", {
+                    url: slot.url.replace(/\{\{1\}\}/g, resolvedButtonParams[slot.index] || "{{1}}"),
+                  })}
                 </p>
               </div>
             ))}
