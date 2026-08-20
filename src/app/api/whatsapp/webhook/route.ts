@@ -638,7 +638,7 @@ async function processMessage(
   }
 
   // Parse message content based on type
-  const { contentText, mediaUrl, mediaType, interactiveReplyId } =
+  const { contentText, mediaUrl, mediaType, interactiveReplyId, flowFields } =
     await parseMessageContent(
       message,
       accessToken,
@@ -830,6 +830,7 @@ async function processMessage(
     | 'new_message_received'
     | 'keyword_match'
     | 'interactive_reply'
+    | 'flow_submitted'
   )[] = []
   // Content-level triggers are suppressed when a flow consumed the
   // message — see the comment block above.
@@ -842,6 +843,12 @@ async function processMessage(
     if (interactiveReplyId) {
       automationTriggers.push('interactive_reply')
     }
+  }
+  // A real Meta WhatsApp Flow (native in-chat form) submission — always
+  // fires regardless of flowConsumed, since it's unrelated to the
+  // wacrm "Chatbot" state machine that flowConsumed tracks.
+  if (flowFields) {
+    automationTriggers.push('flow_submitted')
   }
   // new_contact_created fires only when the webhook just auto-created the
   // contact row. first_inbound_message fires whenever this is the contact's
@@ -870,6 +877,10 @@ async function processMessage(
         // Only set on interactive taps; drives the interactive_reply
         // trigger's exact-id match.
         interactive_reply_id: interactiveReplyId ?? undefined,
+        // Only set on a Flow submission — lets a flow_submitted
+        // automation's send_message / create_deal steps interpolate
+        // {{vars.full_name}} etc. straight from the form fields.
+        vars: flowFields ?? undefined,
       },
     }).catch((err) => console.error('[automations] dispatch failed:', err))
   }
@@ -922,6 +933,13 @@ async function parseMessageContent(
    * tap with the right affordance. Null for everything else.
    */
   interactiveReplyId: string | null
+  /**
+   * Parsed field values from a real Meta WhatsApp Flow submission
+   * (interactive.nfm_reply.response_json), keyed by each screen
+   * component's `name`. Null for everything else — including button/
+   * list taps, which use interactiveReplyId instead.
+   */
+  flowFields: Record<string, string> | null
 }> {
   // getMediaUrl signature is (mediaId, accessToken) — earlier code had
   // the args swapped, so every verification hit an invalid Meta URL and
@@ -979,6 +997,7 @@ async function parseMessageContent(
     mediaUrl: null,
     mediaType: null,
     interactiveReplyId: null,
+    flowFields: null,
   }
 
   switch (message.type) {
@@ -1087,16 +1106,20 @@ async function parseMessageContent(
       const nfm = message.interactive?.nfm_reply
       if (nfm?.response_json) {
         let rendered = nfm.response_json
+        let fields: Record<string, string> | null = null
         try {
-          const fields = JSON.parse(nfm.response_json) as Record<string, unknown>
-          rendered = Object.entries(fields)
+          const parsed = JSON.parse(nfm.response_json) as Record<string, unknown>
+          fields = Object.fromEntries(
+            Object.entries(parsed).map(([k, v]) => [k, String(v)]),
+          )
+          rendered = Object.entries(parsed)
             .map(([key, value]) => `${key}: ${value}`)
             .join('\n')
         } catch {
           // Malformed JSON from Meta (shouldn't happen) — fall back to
           // showing the raw string rather than dropping the submission.
         }
-        return { ...empty, contentText: `[Form submitted]\n${rendered}` }
+        return { ...empty, contentText: `[Form submitted]\n${rendered}`, flowFields: fields }
       }
 
       return { ...empty, contentText: '[Interactive reply]' }

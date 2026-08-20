@@ -465,7 +465,11 @@ export type AutomationTriggerType =
   | 'time_based'
   /** Customer tapped a reply button / list row whose id matches; lets
    *  multi-step menus be chained across automations. */
-  | 'interactive_reply';
+  | 'interactive_reply'
+  /** Customer submitted a real Meta WhatsApp Flow (native in-chat
+   *  form). Context.vars carries the submitted field values, keyed by
+   *  each screen component's name — interpolate with {{vars.field}}. */
+  | 'flow_submitted';
 
 export type AutomationStepType =
   | 'send_message'
