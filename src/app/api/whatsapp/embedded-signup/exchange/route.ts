@@ -89,8 +89,17 @@ export async function POST(request: Request) {
     // logic. Forward the caller's cookies so the internal call
     // authenticates as the same user.
     const cookie = request.headers.get('cookie') ?? ''
-    const origin = new URL(request.url).origin
-    const saveRes = await fetch(`${origin}/api/whatsapp/config`, {
+    // Talk to the Next server directly over plain HTTP inside the
+    // container instead of round-tripping through the external
+    // https:// origin (derived from request.url) back through
+    // nginx -- that path intermittently fails with
+    // ERR_SSL_WRONG_VERSION_NUMBER when the reverse proxy forwards
+    // this server-to-self call. Same container, same port Next
+    // actually listens on (see the "Local: http://localhost:3000"
+    // line Next prints on boot), so this is safe regardless of what
+    // domain/proxy sits in front in production.
+    const internalOrigin = `http://localhost:${process.env.PORT || 3000}`
+    const saveRes = await fetch(`${internalOrigin}/api/whatsapp/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', cookie },
       body: JSON.stringify({
