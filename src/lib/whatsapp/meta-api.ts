@@ -112,6 +112,54 @@ export async function exchangeEmbeddedSignupCode(
   return { accessToken: data.access_token }
 }
 
+export interface DebugAccessTokenResult {
+  isValid: boolean
+  scopes: string[]
+  expiresAt: number | null
+  appId: string | null
+  type: string | null
+  error?: string
+}
+
+/**
+ * GET /debug_token -- asks Meta what a token's ACTUAL granted scopes
+ * are, straight from Meta itself, rather than inferring from what the
+ * login config requested. The two can differ: Embedded Signup issues
+ * a Business Integration System User token, and Meta may silently
+ * narrow that token's real scopes to whatever the WABA connect flow
+ * needs, independent of the login config's permission list.
+ */
+export async function debugAccessToken(inputToken: string): Promise<DebugAccessTokenResult> {
+  const appId = process.env.META_APP_ID
+  const appSecret = process.env.META_APP_SECRET
+  if (!appId || !appSecret) {
+    throw new Error('META_APP_ID / META_APP_SECRET not configured on the server.')
+  }
+  const url = new URL(`${META_API_BASE}/debug_token`)
+  url.searchParams.set('input_token', inputToken)
+  url.searchParams.set('access_token', `${appId}|${appSecret}`)
+  const response = await fetch(url.toString())
+  const json = (await response.json()) as {
+    data?: {
+      is_valid?: boolean
+      scopes?: string[]
+      expires_at?: number
+      app_id?: string
+      type?: string
+      error?: { message?: string }
+    }
+  }
+  const data = json.data
+  return {
+    isValid: !!data?.is_valid,
+    scopes: data?.scopes ?? [],
+    expiresAt: data?.expires_at ?? null,
+    appId: data?.app_id ?? null,
+    type: data?.type ?? null,
+    error: data?.error?.message,
+  }
+}
+
 export interface AssertWabaOwnsPhoneNumberArgs {
   wabaId: string
   phoneNumberId: string
