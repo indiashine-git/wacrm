@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import {
   registerPhoneNumber,
+  setTwoStepPin,
   subscribeWabaToApp,
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
@@ -311,6 +312,18 @@ export async function POST(request: Request) {
         registrationSkipped = true
       } else {
         try {
+          // Force the number's actual PIN to match what we're about
+          // to register with, first -- otherwise a reconnect that
+          // generates a fresh random PIN fails /register with
+          // (#133005) "PIN Mismatch" against whatever PIN was set on
+          // a previous connect. This is the fix for that, and it
+          // means no Meta Business Manager trip is ever required for
+          // a customer to (re)connect.
+          await setTwoStepPin({
+            phoneNumberId: phone_number_id,
+            accessToken: access_token,
+            pin,
+          })
           await registerPhoneNumber({
             phoneNumberId: phone_number_id,
             accessToken: access_token,

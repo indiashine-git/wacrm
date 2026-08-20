@@ -273,6 +273,39 @@ export interface RegisterPhoneNumberResult {
   alreadyRegistered: boolean
 }
 
+export interface SetTwoStepPinArgs {
+  phoneNumberId: string
+  accessToken: string
+  pin: string
+}
+
+/**
+ * Set (or reset) the phone number's two-step verification PIN via the
+ * API -- POST /{phone_number_id} with { pin }. Meta remembers whatever
+ * PIN was last set on the number itself, independent of which app
+ * registered it; a reconnect that generates a fresh random PIN and
+ * calls /register with it directly fails with (#133005) "PIN
+ * Mismatch" unless the number's actual PIN is updated to match first.
+ * Calling this immediately before registerPhoneNumber with the SAME
+ * pin closes that gap entirely -- no Meta Business Manager UI trip
+ * required, ever, for either first connect or a later reconnect.
+ */
+export async function setTwoStepPin(args: SetTwoStepPinArgs): Promise<void> {
+  const { phoneNumberId, accessToken, pin } = args
+  const url = `${META_API_BASE}/${phoneNumberId}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ pin }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to set the two-step verification PIN.')
+  }
+}
+
 /**
  * Register a phone number for inbound webhook events.
  *
