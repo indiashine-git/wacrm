@@ -95,6 +95,20 @@ interface WhatsAppMessage {
     video_url?: string
     ctwa_clid?: string
   }
+  /**
+   * The customer's picks from a catalog message we sent — arrives as
+   * its own message type, not nested under `interactive`.
+   */
+  order?: {
+    catalog_id: string
+    product_items: Array<{
+      product_retailer_id: string
+      quantity: number
+      item_price: number
+      currency: string
+    }>
+    text?: string
+  }
 }
 
 interface WhatsAppWebhookEntry {
@@ -668,7 +682,7 @@ async function processMessage(
   }
 
   // Parse message content based on type
-  const { contentText, mediaUrl, mediaType, interactiveReplyId, flowFields } =
+  const { contentText, mediaUrl, mediaType, interactiveReplyId, flowFields, order } =
     await parseMessageContent(
       message,
       accessToken,
@@ -894,6 +908,23 @@ async function processMessage(
         .eq('flow_token', submittedFlowToken)
     }
   }
+  // Customer submitted their picks from a catalog message -- record it
+  // as a real order. Payment (if any) is a separate step the agent
+  // triggers from the Orders page, not something this webhook does.
+  if (order) {
+    const items = order.product_items ?? []
+    const totalAmount = items.reduce((sum, item) => sum + item.item_price * item.quantity, 0)
+    await supabaseAdmin().from('orders').insert({
+      account_id: accountId,
+      contact_id: contactRecord.id,
+      conversation_id: conversation.id,
+      catalog_id: order.catalog_id,
+      items,
+      total_amount: totalAmount,
+      currency: items[0]?.currency ?? 'INR',
+      customer_note: order.text ?? null,
+    })
+  }
   // new_contact_created fires only when the webhook just auto-created the
   // contact row. first_inbound_message fires whenever this is the contact's
   // first-ever customer-sent message — a superset that also catches
@@ -984,6 +1015,11 @@ async function parseMessageContent(
    * list taps, which use interactiveReplyId instead.
    */
   flowFields: Record<string, string> | null
+  /**
+   * Set when the customer submits their picks from a catalog message
+   * we sent — Meta's `order` message type. Null for everything else.
+   */
+  order: WhatsAppMessage['order'] | null
 }> {
   // getMediaUrl signature is (mediaId, accessToken) — earlier code had
   // the args swapped, so every verification hit an invalid Meta URL and
@@ -1042,11 +1078,25 @@ async function parseMessageContent(
     mediaType: null,
     interactiveReplyId: null,
     flowFields: null,
+    order: null,
   }
 
   switch (message.type) {
     case 'text':
       return { ...empty, contentText: message.text?.body || null }
+
+    case 'order': {
+      // Readable summary for the message bubble -- structured data
+      // goes into the `orders` table (processMessage inserts it using
+      // the `order` field returned here), same split as the Flow
+      // form-submitted case below.
+      const items = message.order?.product_items ?? []
+      const total = items.reduce((sum, item) => sum + item.item_price * item.quantity, 0)
+      const currency = items[0]?.currency ?? ''
+      const lines = items.map((item) => `${item.quantity}x ${item.product_retailer_id}`)
+      const summary = [`[Order]`, ...lines, `Total: ${currency} ${total.toFixed(2)}`].join('\n')
+      return { ...empty, contentText: summary, order: message.order ?? null }
+    }
 
     case 'image':
       if (message.image?.id) {

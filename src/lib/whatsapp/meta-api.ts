@@ -1430,3 +1430,65 @@ export async function downloadMedia(
   const buffer = Buffer.from(await response.arrayBuffer())
   return { buffer, contentType }
 }
+
+export interface SendCatalogMessageArgs {
+  phoneNumberId: string
+  accessToken: string
+  to: string
+  bodyText: string
+  footerText?: string
+  /**
+   * Meta's catalog_message envelope needs a real product's
+   * retailer_id from the catalog as the thumbnail -- there's no
+   * "just show the catalog" option. The catalog itself isn't part of
+   * this payload: Meta sends whichever catalog is connected to this
+   * phone number's WABA commerce settings, not one picked per-message.
+   */
+  thumbnailProductRetailerId: string
+}
+
+/**
+ * Send the account's Meta Commerce catalog in-chat as a tap-to-browse
+ * message. The customer picks products and quantities inside WhatsApp
+ * itself; their selection comes back as an inbound `order` message
+ * (handled in the webhook route), not through this function.
+ */
+export async function sendCatalogMessage(
+  args: SendCatalogMessageArgs
+): Promise<MetaSendResult> {
+  const { phoneNumberId, accessToken, to, bodyText, footerText, thumbnailProductRetailerId } = args
+  validateInteractiveBody(bodyText)
+
+  const interactive: Record<string, unknown> = {
+    type: 'catalog_message',
+    body: { text: bodyText },
+    action: {
+      name: 'catalog_message',
+      parameters: { thumbnail_product_retailer_id: thumbnailProductRetailerId },
+    },
+  }
+  if (footerText) interactive.footer = { text: footerText }
+
+  const body = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'interactive',
+    interactive,
+  }
+
+  const url = `${META_API_BASE}/${phoneNumberId}/messages`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = await response.json()
+  return { messageId: data.messages[0].id }
+}
