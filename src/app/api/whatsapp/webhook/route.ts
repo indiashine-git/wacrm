@@ -849,6 +849,20 @@ async function processMessage(
   // wacrm "Chatbot" state machine that flowConsumed tracks.
   if (flowFields) {
     automationTriggers.push('flow_submitted')
+    // Meta echoes our flow_token back inside response_json -- match it
+    // to the flow_sends row this submission completes.
+    const submittedFlowToken = flowFields.flow_token
+    if (submittedFlowToken) {
+      await supabaseAdmin()
+        .from('flow_sends')
+        .update({
+          status: 'submitted',
+          submitted_fields: flowFields,
+          submitted_at: new Date().toISOString(),
+        })
+        .eq('account_id', accountId)
+        .eq('flow_token', submittedFlowToken)
+    }
   }
   // new_contact_created fires only when the webhook just auto-created the
   // contact row. first_inbound_message fires whenever this is the contact's

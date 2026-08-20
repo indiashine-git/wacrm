@@ -36,12 +36,30 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { formatRelative } from "@/lib/automations/trigger-meta";
+import { ListChecks, ChevronDown, ChevronRight } from "lucide-react";
 
 interface MetaFlow {
   id: string;
   name: string;
   status: string;
   categories: string[];
+}
+
+interface RunCount {
+  total: number;
+  submitted: number;
+  lastSentAt: string | null;
+}
+
+interface FlowRun {
+  id: string;
+  to_phone: string;
+  status: "sent" | "submitted" | "failed";
+  submitted_fields: Record<string, string> | null;
+  sent_at: string;
+  submitted_at: string | null;
+  contacts: { name: string | null } | null;
 }
 
 interface DraftField {
@@ -175,6 +193,12 @@ function toScreenId(name: string): string {
 export default function MetaFlowsPage() {
   const [loading, setLoading] = useState(true);
   const [flows, setFlows] = useState<MetaFlow[]>([]);
+  const [runCounts, setRunCounts] = useState<Record<string, RunCount>>({});
+
+  const [logsFlow, setLogsFlow] = useState<MetaFlow | null>(null);
+  const [logsRuns, setLogsRuns] = useState<FlowRun[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [expandedRun, setExpandedRun] = useState<string | null>(null);
 
   const [previewFlow, setPreviewFlow] = useState<MetaFlow | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -201,6 +225,7 @@ export default function MetaFlowsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Failed (HTTP ${res.status})`);
       setFlows(data.flows || []);
+      setRunCounts(data.runCounts || {});
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load flows");
     } finally {
@@ -211,6 +236,23 @@ export default function MetaFlowsPage() {
   useEffect(() => {
     fetchFlows();
   }, []);
+
+  async function openLogs(flow: MetaFlow) {
+    setLogsFlow(flow);
+    setLogsRuns([]);
+    setExpandedRun(null);
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`/api/whatsapp/flows/${flow.id}/runs`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Failed (HTTP ${res.status})`);
+      setLogsRuns(data.runs || []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load run logs");
+    } finally {
+      setLogsLoading(false);
+    }
+  }
 
   async function openPreview(flow: MetaFlow) {
     setPreviewFlow(flow);
@@ -246,7 +288,7 @@ export default function MetaFlowsPage() {
       const res = await fetch("/api/whatsapp/flows/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, flowId: sendTarget.id, screen, flowCta, bodyText }),
+        body: JSON.stringify({ to, flowId: sendTarget.id, flowName: sendTarget.name, screen, flowCta, bodyText }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || `Send failed (HTTP ${res.status})`);
@@ -420,6 +462,20 @@ export default function MetaFlowsPage() {
                     </span>
                   ))}
                 </div>
+
+                {/* wacrm's own send/submission log -- Meta has no run-count
+                    API for Flows, so this is tallied from our flow_sends
+                    table, not fetched from Meta. */}
+                <button
+                  type="button"
+                  onClick={() => openLogs(flow)}
+                  className="mt-3 flex items-center gap-1.5 self-start text-[11px] text-muted-foreground hover:text-foreground"
+                >
+                  <ListChecks className="h-3 w-3" />
+                  {runCounts[flow.id]
+                    ? `${runCounts[flow.id].total} run${runCounts[flow.id].total === 1 ? "" : "s"} · ${runCounts[flow.id].submitted} submitted${runCounts[flow.id].lastSentAt ? ` · last ${formatRelative(runCounts[flow.id].lastSentAt)}` : ""}`
+                    : "0 runs"}
+                </button>
 
                 <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-3">
                   <Button variant="ghost" size="sm" onClick={() => openPreview(flow)}>
@@ -723,6 +779,87 @@ export default function MetaFlowsPage() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run logs dialog -- our own send/submission history for this
+          flow, matching the Automations logs UX. Meta doesn't expose
+          this, so every row here comes from flow_sends. */}
+      <Dialog open={logsFlow !== null} onOpenChange={(open) => !open && setLogsFlow(null)}>
+        <DialogContent className="bg-popover border-border sm:max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-popover-foreground">
+              Run log — &quot;{logsFlow?.name}&quot;
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              wacrm&apos;s own send/submission history — Meta doesn&apos;t provide this for Flows.
+            </DialogDescription>
+          </DialogHeader>
+          {logsLoading ? (
+            <div className="flex h-32 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : logsRuns.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No sends yet for this flow.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {logsRuns.map((run) => {
+                const expanded = expandedRun === run.id;
+                const statusClass =
+                  run.status === "submitted"
+                    ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                    : run.status === "failed"
+                      ? "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-300"
+                      : "border-border bg-muted text-muted-foreground";
+                return (
+                  <div key={run.id} className="rounded-lg border border-border bg-background">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedRun(expanded ? null : run.id)}
+                      className="flex w-full items-center gap-2 p-2.5 text-left"
+                    >
+                      {expanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-foreground">
+                          {run.contacts?.name || run.to_phone}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Sent {formatRelative(run.sent_at)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn("shrink-0 text-[10px]", statusClass)}>
+                        {run.status}
+                      </Badge>
+                    </button>
+                    {expanded && (
+                      <div className="border-t border-border px-3 py-2">
+                        {run.submitted_fields ? (
+                          <dl className="space-y-1">
+                            {Object.entries(run.submitted_fields).map(([key, value]) => (
+                              <div key={key} className="flex gap-2 text-[11px]">
+                                <dt className="shrink-0 text-muted-foreground">{key}:</dt>
+                                <dd className="truncate text-foreground">{String(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : (
+                          <p className="text-[11px] text-muted-foreground">
+                            Not submitted yet.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
