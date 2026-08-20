@@ -112,19 +112,46 @@ export function CommercePanel() {
           <CardHeader>
             <CardTitle className="text-sm">Catalog</CardTitle>
             <CardDescription>
-              Create a product catalog in Meta Commerce Manager, connect it to this WhatsApp number, then
-              paste its catalog_id here.
+              A catalog is the list of products WhatsApp shows your customers. WATU can&apos;t create one for
+              you yet -- Meta requires that step to happen in their own Commerce Manager.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-1.5">
-            <Label className="text-muted-foreground">Catalog ID</Label>
-            <Input
-              value={catalogId}
-              onChange={(e) => setCatalogId(e.target.value)}
-              placeholder="e.g. 123456789012345"
-              disabled={!canEditSettings}
-              className="bg-muted border-border text-foreground"
-            />
+          <CardContent className="space-y-3">
+            <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+              <li>
+                Open{' '}
+                <a
+                  href="https://business.facebook.com/commerce/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Meta Commerce Manager
+                </a>{' '}
+                and create a catalog (or pick an existing one).
+              </li>
+              <li>In that catalog&apos;s settings, connect it to this WhatsApp number.</li>
+              <li>
+                Back in Commerce Manager, open <span className="text-foreground">Catalog settings</span> --
+                the number under the catalog name is its ID. Copy it and paste it below.
+              </li>
+            </ol>
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">Catalog ID</Label>
+              <Input
+                value={catalogId}
+                onChange={(e) => setCatalogId(e.target.value)}
+                placeholder="e.g. 123456789012345"
+                disabled={!canEditSettings}
+                className="bg-muted border-border text-foreground"
+              />
+            </div>
+            {catalogId.trim() && (
+              <p className="text-[11px] text-muted-foreground">
+                Once you add products below, they can take a few minutes to show up when you send the
+                catalog on WhatsApp -- that delay is on Meta&apos;s side, not WATU.
+              </p>
+            )}
           </CardContent>
         </Card>
 
