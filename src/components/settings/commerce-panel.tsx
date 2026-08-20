@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { SettingsPanelHead } from './settings-panel-head';
+import { CommerceProducts } from './commerce-products';
 
 type PaymentProvider = 'none' | 'razorpay' | 'upi';
 
@@ -203,6 +204,8 @@ export function CommercePanel() {
             )}
           </CardContent>
         </Card>
+
+        {catalogId.trim() && <CommerceProducts catalogId={catalogId.trim()} />}
 
         {canEditSettings && (
           <Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 text-primary-foreground">

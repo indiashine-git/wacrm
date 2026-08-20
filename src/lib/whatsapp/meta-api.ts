@@ -1515,6 +1515,148 @@ export async function getMediaUrl(
   }
 }
 
+// ============================================================
+// Catalog product management
+// ============================================================
+//
+// So a catalog isn't dead-end code that only Meta Commerce Manager
+// can edit -- these let WATU add/list/update/delete a catalog's
+// products directly. Verified against Meta's own docs: price is an
+// integer in the currency's minor unit (e.g. "1999" = 19.99), not a
+// decimal string.
+
+export interface CatalogProduct {
+  id: string
+  retailer_id?: string
+  name: string
+  description?: string
+  price?: number
+  currency?: string
+  image_url?: string
+  url?: string
+  availability?: string
+}
+
+export interface ListCatalogProductsArgs {
+  catalogId: string
+  accessToken: string
+}
+
+/** GET /{catalog_id}/products */
+export async function listCatalogProducts(
+  args: ListCatalogProductsArgs
+): Promise<CatalogProduct[]> {
+  const { catalogId, accessToken } = args
+  const url = `${META_API_BASE}/${catalogId}/products?fields=id,retailer_id,name,description,price,currency,image_url,url,availability&limit=100`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to list catalog products.')
+  }
+  const data = (await response.json()) as { data?: CatalogProduct[] }
+  return data.data ?? []
+}
+
+export interface CreateCatalogProductArgs {
+  catalogId: string
+  accessToken: string
+  retailerId: string
+  name: string
+  description?: string
+  /** Price in the currency's minor unit, e.g. 1999 for 19.99. */
+  priceMinorUnits: number
+  currency: string
+  imageUrl: string
+  productUrl?: string
+}
+
+/** POST /{catalog_id}/products */
+export async function createCatalogProduct(
+  args: CreateCatalogProductArgs
+): Promise<{ productId: string }> {
+  const { catalogId, accessToken, retailerId, name, description, priceMinorUnits, currency, imageUrl, productUrl } =
+    args
+  const url = `${META_API_BASE}/${catalogId}/products`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({
+      retailer_id: retailerId,
+      name,
+      description,
+      price: priceMinorUnits,
+      currency,
+      image_url: imageUrl,
+      url: productUrl,
+      availability: 'in stock',
+      condition: 'new',
+    }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to create catalog product.')
+  }
+  const data = (await response.json()) as { id: string }
+  return { productId: data.id }
+}
+
+export interface UpdateCatalogProductArgs {
+  productId: string
+  accessToken: string
+  name?: string
+  description?: string
+  priceMinorUnits?: number
+  currency?: string
+  imageUrl?: string
+  availability?: string
+}
+
+/** POST /{product_id} (partial update -- only the fields provided). */
+export async function updateCatalogProduct(args: UpdateCatalogProductArgs): Promise<void> {
+  const { productId, accessToken, name, description, priceMinorUnits, currency, imageUrl, availability } = args
+  const body: Record<string, unknown> = {}
+  if (name !== undefined) body.name = name
+  if (description !== undefined) body.description = description
+  if (priceMinorUnits !== undefined) body.price = priceMinorUnits
+  if (currency !== undefined) body.currency = currency
+  if (imageUrl !== undefined) body.image_url = imageUrl
+  if (availability !== undefined) body.availability = availability
+
+  const url = `${META_API_BASE}/${productId}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to update catalog product.')
+  }
+}
+
+export interface DeleteCatalogProductArgs {
+  productId: string
+  accessToken: string
+}
+
+/** DELETE /{product_id} */
+export async function deleteCatalogProduct(args: DeleteCatalogProductArgs): Promise<void> {
+  const { productId, accessToken } = args
+  const url = `${META_API_BASE}/${productId}`
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to delete catalog product.')
+  }
+}
+
 export interface DownloadMediaArgs {
   downloadUrl: string
   accessToken: string
