@@ -14,10 +14,19 @@ interface Product {
   retailer_id?: string;
   name: string;
   description?: string;
-  price?: number;
+  // Meta returns this pre-formatted on read (e.g. "₹6.00"), not a raw
+  // number -- parse it back to a plain decimal only when prefilling
+  // the edit form's numeric input.
+  price?: string;
   currency?: string;
   image_url?: string;
   availability?: string;
+}
+
+function parsePriceToDecimal(price: string | undefined): string {
+  if (!price) return '';
+  const numeric = price.replace(/[^0-9.]/g, '');
+  return numeric;
 }
 
 interface DraftProduct {
@@ -72,7 +81,7 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
       retailerId: product.retailer_id ?? '',
       name: product.name,
       description: product.description ?? '',
-      price: product.price ? (product.price / 100).toFixed(2) : '',
+      price: parsePriceToDecimal(product.price),
       currency: product.currency ?? 'INR',
       imageUrl: product.image_url ?? '',
     });
@@ -252,7 +261,7 @@ export function CommerceProducts({ catalogId }: { catalogId: string }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium text-foreground">{product.name}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {product.currency} {product.price ? (product.price / 100).toFixed(2) : '-'}
+                    {product.price ?? '-'}
                     {product.availability ? ` · ${product.availability}` : ''}
                   </p>
                 </div>

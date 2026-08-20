@@ -1636,7 +1636,10 @@ export interface CatalogProduct {
   retailer_id?: string
   name: string
   description?: string
-  price?: number
+  // Meta returns this pre-formatted on read (e.g. "₹6.00"), not the
+  // raw minor-unit integer create/update accept -- string here to
+  // match reality rather than the write-side shape.
+  price?: string
   currency?: string
   image_url?: string
   url?: string
