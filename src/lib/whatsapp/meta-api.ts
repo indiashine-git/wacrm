@@ -713,76 +713,16 @@ export async function editMessageTemplate(
 // ============================================================
 //
 // Meta maintains a library of pre-written, pre-vetted templates
-// (order updates, OTPs, appointment reminders, etc.) that skip the
-// normal review queue — creating from the library returns
-// status: "APPROVED" immediately instead of "PENDING". Customizing
-// beyond the library's fill-in-the-blank inputs forces a real review.
+// (order updates, OTPs, appointment reminders, etc.). There is NO
+// public Graph API to browse/list it — confirmed live: GET on
+// {waba_id or business_id}/message_template_library returns
+// "(#100) Tried accessing nonexisting field" at every API version
+// (v21–v26), even though the same account browses it fine in Meta's
+// own WhatsApp Manager UI (a private, non-public endpoint). Only
+// cloning by an exact known name works publicly — and even that
+// still returns status PENDING (normal review), not instant APPROVED
+// as Meta's own docs imply.
 // See https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-library
-
-export interface LibraryTemplateButton {
-  type: string
-  text?: string
-  url?: string
-  phone_number?: string
-}
-
-export interface LibraryTemplateComponent {
-  type: string
-  text?: string
-  format?: string
-  buttons?: LibraryTemplateButton[]
-}
-
-export interface LibraryTemplate {
-  name: string
-  language: string
-  category: string
-  topic?: string
-  usecase?: string
-  industry?: string
-  components: LibraryTemplateComponent[]
-}
-
-export interface BrowseTemplateLibraryArgs {
-  wabaId: string
-  accessToken: string
-  search?: string
-  topic?: string
-  usecase?: string
-  industry?: string
-  language?: string
-  name?: string
-}
-
-/**
- * Browse Meta's curated template library, optionally filtered. Returns
- * up to Meta's own page size (no pagination follow-through — the
- * library is small enough per-filter that one page is enough for v1).
- */
-export async function browseTemplateLibrary(
-  args: BrowseTemplateLibraryArgs,
-): Promise<LibraryTemplate[]> {
-  const { wabaId, accessToken, search, topic, usecase, industry, language, name } = args
-  const params = new URLSearchParams({
-    fields: 'name,language,category,topic,usecase,industry,components',
-  })
-  if (search) params.set('search', search)
-  if (topic) params.set('topic', topic)
-  if (usecase) params.set('usecase', usecase)
-  if (industry) params.set('industry', industry)
-  if (language) params.set('language', language)
-  if (name) params.set('name', name)
-
-  const url = `${META_API_BASE_LIBRARY}/${wabaId}/message_template_library?${params.toString()}`
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  })
-  if (!response.ok) {
-    await throwMetaError(response, `Meta API error: ${response.status}`)
-  }
-  const data = (await response.json()) as { data?: LibraryTemplate[] }
-  return data.data ?? []
-}
 
 export interface CreateTemplateFromLibraryArgs {
   wabaId: string

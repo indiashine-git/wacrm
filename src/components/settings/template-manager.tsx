@@ -22,7 +22,6 @@ import {
   Reply,
   Languages,
   Library,
-  Search,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -189,26 +188,6 @@ const WHATSAPP_LANGUAGES: { code: string; label: string }[] = [
   { code: 'zu', label: 'Zulu' },
 ];
 
-interface LibraryTemplateComponent {
-  type: string;
-  text?: string;
-  format?: string;
-}
-
-interface LibraryTemplate {
-  name: string;
-  language: string;
-  category: string;
-  topic?: string;
-  usecase?: string;
-  industry?: string;
-  components: LibraryTemplateComponent[];
-}
-
-function libraryBodyText(tpl: LibraryTemplate): string {
-  return tpl.components.find((c) => c.type === 'BODY')?.text ?? '';
-}
-
 function emptyButton(type: TemplateButton['type']): TemplateButton {
   switch (type) {
     case 'QUICK_REPLY':
@@ -232,14 +211,16 @@ export function TemplateManager() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  // Meta's Template Library — pre-vetted templates that skip review
-  // and come back status: APPROVED immediately.
+  // Meta's Template Library — pre-vetted templates you pick by name in
+  // Meta's own WhatsApp Manager UI (Meta exposes no public API to
+  // browse the library, only to create from a known name), then clone
+  // in here by exact name. Still goes through Meta's normal PENDING
+  // review — not instant-approve despite Meta's own docs suggesting
+  // otherwise (verified live: creating from a real library template
+  // returned status PENDING, not APPROVED).
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [libraryLoading, setLibraryLoading] = useState(false);
-  const [libraryTemplates, setLibraryTemplates] = useState<LibraryTemplate[]>([]);
-  const [librarySearch, setLibrarySearch] = useState('');
-  const [selectedLibraryTemplate, setSelectedLibraryTemplate] =
-    useState<LibraryTemplate | null>(null);
+  const [libraryTemplateName, setLibraryTemplateName] = useState('');
+  const [libraryLanguage, setLibraryLanguage] = useState('en_US');
   const [libraryOwnName, setLibraryOwnName] = useState('');
   const [addingFromLibrary, setAddingFromLibrary] = useState(false);
   const [form, setForm] = useState<TemplateFormData>(emptyForm);
@@ -515,50 +496,24 @@ export function TemplateManager() {
     }
   }
 
-  async function openLibrary() {
+  function openLibrary() {
     setLibraryOpen(true);
-    setSelectedLibraryTemplate(null);
+    setLibraryTemplateName('');
+    setLibraryLanguage('en_US');
     setLibraryOwnName('');
-    await handleBrowseLibrary('');
-  }
-
-  async function handleBrowseLibrary(query: string) {
-    setLibraryLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (query.trim()) params.set('search', query.trim());
-      const res = await fetch(`/api/whatsapp/templates/library?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `Browse failed (HTTP ${res.status})`);
-      setLibraryTemplates(data.templates || []);
-    } catch (err) {
-      console.error('Library browse error:', err);
-      toast.error(err instanceof Error ? err.message : t('toastLibraryBrowseFailed'));
-    } finally {
-      setLibraryLoading(false);
-    }
-  }
-
-  function selectLibraryTemplate(tpl: LibraryTemplate) {
-    setSelectedLibraryTemplate(tpl);
-    setLibraryOwnName(tpl.name);
   }
 
   async function handleAddFromLibrary() {
-    if (!user || !selectedLibraryTemplate || !libraryOwnName.trim()) return;
+    if (!user || !libraryTemplateName.trim() || !libraryOwnName.trim()) return;
     setAddingFromLibrary(true);
     try {
-      const tpl = selectedLibraryTemplate;
-      const footer = tpl.components.find((c) => c.type === 'FOOTER')?.text;
       const res = await fetch('/api/whatsapp/templates/library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: libraryOwnName.trim(),
-          language: tpl.language,
-          libraryTemplateName: tpl.name,
-          bodyText: libraryBodyText(tpl),
-          footerText: footer,
+          language: libraryLanguage,
+          libraryTemplateName: libraryTemplateName.trim(),
         }),
       });
       const data = await res.json();
@@ -566,7 +521,7 @@ export function TemplateManager() {
       toast.success(t('toastLibraryAddSuccess'));
       await fetchTemplates(user.id);
       setLibraryOpen(false);
-      setSelectedLibraryTemplate(null);
+      setLibraryTemplateName('');
       setLibraryOwnName('');
     } catch (err) {
       console.error('Library add error:', err);
@@ -1589,20 +1544,21 @@ export function TemplateManager() {
         </DialogContent>
       </Dialog>
 
-      {/* Meta's pre-vetted Template Library — cloning one skips the
-          normal review queue; Meta returns status APPROVED right away. */}
+      {/* Meta's pre-vetted Template Library. Meta exposes no public API
+          to browse it — only to clone a template you already know the
+          exact name of — so this points the user at Meta's own picker
+          UI first, then takes the name they copied from there. */}
       <Dialog
         open={libraryOpen}
         onOpenChange={(open) => {
           setLibraryOpen(open);
           if (!open) {
-            setSelectedLibraryTemplate(null);
+            setLibraryTemplateName('');
             setLibraryOwnName('');
-            setLibrarySearch('');
           }
         }}
       >
-        <DialogContent className="bg-popover border-border sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="bg-popover border-border sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">{t('libraryDialogTitle')}</DialogTitle>
             <DialogDescription className="text-muted-foreground">
@@ -1610,116 +1566,89 @@ export function TemplateManager() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <a
+            href="https://business.facebook.com/latest/whatsapp_manager/template_library"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-sm text-foreground hover:border-primary/50 hover:bg-muted/50 transition-colors"
+          >
+            <span>{t('libraryOpenMeta')}</span>
+            <ExternalLink className="size-4 shrink-0 text-muted-foreground" />
+          </a>
+
+          <div className="space-y-4 pt-1">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('libraryTemplateNameLabel')}</Label>
               <Input
-                value={librarySearch}
-                onChange={(e) => setLibrarySearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void handleBrowseLibrary(librarySearch);
-                }}
-                placeholder={t('librarySearchPlaceholder')}
-                className="h-9 bg-muted border-border pl-8 text-sm text-foreground placeholder:text-muted-foreground"
+                value={libraryTemplateName}
+                onChange={(e) => setLibraryTemplateName(e.target.value)}
+                placeholder={t('libraryTemplateNamePlaceholder')}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
               />
+              <p className="text-[11px] text-muted-foreground">{t('libraryTemplateNameHint')}</p>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => handleBrowseLibrary(librarySearch)}
-              disabled={libraryLoading}
-              className="h-9"
-            >
-              {libraryLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                t('search')
-              )}
-            </Button>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('language')}</Label>
+              <Select
+                value={libraryLanguage || undefined}
+                onValueChange={(val) => {
+                  if (!val) return;
+                  setLibraryLanguage(val);
+                }}
+              >
+                <SelectTrigger className="w-full bg-muted border-border text-foreground">
+                  <SelectValue placeholder={t('languagePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border max-h-72">
+                  {WHATSAPP_LANGUAGES.map(({ code, label }) => (
+                    <SelectItem
+                      key={code}
+                      value={code}
+                      className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
+                    >
+                      {label} <span className="text-muted-foreground">({code})</span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('libraryOwnNameLabel')}</Label>
+              <Input
+                value={libraryOwnName}
+                onChange={(e) => setLibraryOwnName(e.target.value)}
+                placeholder={t('namePlaceholder')}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+              <p className="text-[11px] text-muted-foreground">{t('libraryOwnNameHint')}</p>
+            </div>
           </div>
 
-          {selectedLibraryTemplate ? (
-            <div className="space-y-3 pt-2">
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <h4 className="font-medium text-foreground text-sm">
-                    {selectedLibraryTemplate.name}
-                  </h4>
-                  <Badge className="text-xs border bg-blue-600/20 text-blue-400 border-blue-600/30">
-                    {selectedLibraryTemplate.category}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground uppercase">
-                    {selectedLibraryTemplate.language}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {libraryBodyText(selectedLibraryTemplate)}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-muted-foreground">{t('libraryOwnNameLabel')}</Label>
-                <Input
-                  value={libraryOwnName}
-                  onChange={(e) => setLibraryOwnName(e.target.value)}
-                  placeholder={t('namePlaceholder')}
-                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-                />
-                <p className="text-[11px] text-muted-foreground">{t('libraryOwnNameHint')}</p>
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedLibraryTemplate(null)}
-                  className="border-border text-muted-foreground hover:bg-muted"
-                >
-                  {t('back')}
-                </Button>
-                <Button
-                  onClick={handleAddFromLibrary}
-                  disabled={addingFromLibrary || !libraryOwnName.trim()}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground"
-                >
-                  {addingFromLibrary ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" />
-                      {t('adding')}
-                    </>
-                  ) : (
-                    t('useTemplate')
-                  )}
-                </Button>
-              </div>
-            </div>
-          ) : libraryLoading ? (
-            <div className="flex items-center justify-center py-10">
-              <Loader2 className="size-6 animate-spin text-primary" />
-            </div>
-          ) : libraryTemplates.length === 0 ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              {t('libraryNoResults')}
-            </div>
-          ) : (
-            <div className="grid gap-2 max-h-[50vh] overflow-y-auto pr-1">
-              {libraryTemplates.map((tpl) => (
-                <button
-                  key={`${tpl.name}-${tpl.language}`}
-                  type="button"
-                  onClick={() => selectLibraryTemplate(tpl)}
-                  className="text-left rounded-lg border border-border bg-card p-3 hover:border-primary/50 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-medium text-foreground text-sm">{tpl.name}</span>
-                    <Badge className="text-xs border bg-blue-600/20 text-blue-400 border-blue-600/30">
-                      {tpl.category}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground uppercase">{tpl.language}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground line-clamp-2">
-                    {libraryBodyText(tpl)}
-                  </p>
-                </button>
-              ))}
-            </div>
-          )}
+          <DialogFooter className="bg-popover border-border">
+            <Button
+              variant="outline"
+              onClick={() => setLibraryOpen(false)}
+              className="border-border text-muted-foreground hover:bg-muted"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              onClick={handleAddFromLibrary}
+              disabled={addingFromLibrary || !libraryTemplateName.trim() || !libraryOwnName.trim()}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {addingFromLibrary ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('adding')}
+                </>
+              ) : (
+                t('useTemplate')
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

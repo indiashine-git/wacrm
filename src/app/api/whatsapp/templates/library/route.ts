@@ -6,101 +6,62 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import {
-  browseTemplateLibrary,
-  createTemplateFromLibrary,
-} from '@/lib/whatsapp/meta-api'
+import { createTemplateFromLibrary } from '@/lib/whatsapp/meta-api'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
-import type { TemplateButton } from '@/types'
 
 /**
- * Meta's Template Library: pre-vetted, ready-to-use templates that
- * skip the normal review queue. GET browses/filters the library;
- * POST clones one into the account's own message_templates catalog,
- * pre-approved (Meta returns status APPROVED immediately).
+ * Clone a template from Meta's pre-vetted Template Library.
+ *
+ * Meta exposes no public Graph API to browse the library (confirmed
+ * live: `GET /{waba_id}/message_template_library` returns
+ * "(#100) Tried accessing nonexisting field" at every API version,
+ * even though the same account can browse it fine in Meta's own
+ * WhatsApp Manager UI — that UI calls a private, non-public endpoint).
+ * Only cloning by exact known name works publicly. The user finds the
+ * name in Meta's UI and pastes it in here.
+ *
+ * Also: despite Meta's docs implying instant approval, a live test
+ * against a real WABA returned `status: "PENDING"`, not "APPROVED" —
+ * cloning a library template still queues for normal review, it's
+ * just built from Meta's own pre-vetted content.
  *
  * See https://developers.facebook.com/documentation/business-messaging/whatsapp/templates/template-library
  */
-
-async function getConfig(supabase: Awaited<ReturnType<typeof requireRole>>['supabase'], accountId: string) {
-  const { data: config, error: configError } = await supabase
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .single()
-
-  if (configError || !config) {
-    throw new Response(
-      JSON.stringify({
-        error:
-          'WhatsApp not configured. Connect your WhatsApp Business account in Settings first.',
-      }),
-      { status: 400 },
-    )
-  }
-  if (!config.waba_id) {
-    throw new Response(
-      JSON.stringify({
-        error:
-          'WABA (WhatsApp Business Account) ID missing. Re-connect your account in Settings.',
-      }),
-      { status: 400 },
-    )
-  }
-  return config
-}
-
-export async function GET(request: Request) {
-  try {
-    const { supabase, accountId } = await requireRole('admin')
-    const config = await getConfig(supabase, accountId)
-    const accessToken = decrypt(config.access_token)
-
-    const { searchParams } = new URL(request.url)
-    const templates = await browseTemplateLibrary({
-      wabaId: config.waba_id,
-      accessToken,
-      search: searchParams.get('search') || undefined,
-      topic: searchParams.get('topic') || undefined,
-      usecase: searchParams.get('usecase') || undefined,
-      industry: searchParams.get('industry') || undefined,
-      language: searchParams.get('language') || undefined,
-    })
-
-    return NextResponse.json({ templates })
-  } catch (error) {
-    if (error instanceof Response) return error
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      return toErrorResponse(error)
-    }
-    console.error('Error browsing template library:', error)
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : 'Failed to browse template library.',
-      },
-      { status: 500 },
-    )
-  }
-}
 
 interface CreateFromLibraryBody {
   name: string
   language: string
   libraryTemplateName: string
-  buttonInputs?: unknown[]
-  bodyInputs?: Record<string, unknown>
-  /** Raw body/footer/buttons as Meta returned them, for the local row preview. */
-  bodyText?: string
-  footerText?: string
-  buttons?: TemplateButton[]
 }
 
 export async function POST(request: Request) {
   try {
     const { supabase, accountId, userId } = await requireRole('admin')
-    const config = await getConfig(supabase, accountId)
-    const accessToken = decrypt(config.access_token)
+
+    const { data: config, error: configError } = await supabase
+      .from('whatsapp_config')
+      .select('*')
+      .eq('account_id', accountId)
+      .single()
+
+    if (configError || !config) {
+      return NextResponse.json(
+        {
+          error:
+            'WhatsApp not configured. Connect your WhatsApp Business account in Settings first.',
+        },
+        { status: 400 },
+      )
+    }
+    if (!config.waba_id) {
+      return NextResponse.json(
+        {
+          error:
+            'WABA (WhatsApp Business Account) ID missing. Re-connect your account in Settings.',
+        },
+        { status: 400 },
+      )
+    }
 
     let body: CreateFromLibraryBody
     try {
@@ -116,6 +77,8 @@ export async function POST(request: Request) {
       )
     }
 
+    const accessToken = decrypt(config.access_token)
+
     let meta
     try {
       meta = await createTemplateFromLibrary({
@@ -126,14 +89,16 @@ export async function POST(request: Request) {
         // Library templates are UTILITY-only per Meta's spec.
         category: 'UTILITY',
         libraryTemplateName: body.libraryTemplateName.trim(),
-        buttonInputs: body.buttonInputs,
-        bodyInputs: body.bodyInputs,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Meta library-create failed.'
       return NextResponse.json({ error: message }, { status: 502 })
     }
 
+    // Meta doesn't echo the library template's body/footer/buttons back
+    // on create — only id/status/category. The row starts with empty
+    // content; "Sync from Meta" (already in this page) backfills the
+    // full components once the sync route runs.
     const { data: row, error: upsertErr } = await supabase
       .from('message_templates')
       .upsert(
@@ -143,9 +108,7 @@ export async function POST(request: Request) {
           name: body.name.trim(),
           category: 'Utility',
           language: body.language.trim(),
-          body_text: body.bodyText ?? '',
-          footer_text: body.footerText ?? null,
-          buttons: body.buttons?.length ? body.buttons : null,
+          body_text: '',
           status: normalizeStatus(meta.status),
           meta_template_id: meta.id,
           submission_error: null,
@@ -169,7 +132,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, template: row })
   } catch (error) {
-    if (error instanceof Response) return error
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       return toErrorResponse(error)
     }
