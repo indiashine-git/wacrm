@@ -54,6 +54,8 @@ import { AiThreadBanner } from "./ai-thread-banner";
 import { buildReplyPreview } from "./reply-quote";
 import { renderTemplateBody } from "@/lib/whatsapp/template-body";
 import { toast } from "sonner";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { ContactSidebar } from "./contact-sidebar";
 
 interface ReplyDraft {
   id: string;
@@ -171,6 +173,7 @@ export function MessageThread({
   const { user } = useAuth();
   const { getPresence, getRow, now } = usePresence();
   const [loading, setLoading] = useState(false);
+  const [mobileContactOpen, setMobileContactOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -916,13 +919,24 @@ export function MessageThread({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
-            <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
-          </div>
+          {/* Avatar + name double as the mobile entry point into contact
+              details -- on lg+ the sidebar is already visible/toggleable
+              via the button further right, so this only matters on
+              mobile where that panel has nowhere to render permanently. */}
+          <button
+            type="button"
+            onClick={() => setMobileContactOpen(true)}
+            className="flex min-w-0 items-center gap-2 sm:gap-3 lg:pointer-events-none"
+            aria-label={t("showContact")}
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 text-left">
+              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+              <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
+            </div>
+          </button>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
           <Badge
@@ -1205,6 +1219,17 @@ export function MessageThread({
         onActiveIdChange={handleMediaChange}
         contactLabel={contactDisplayName}
       />
+
+      {/* Mobile contact-details drawer -- the permanent right-hand
+          ContactSidebar only renders on lg+ (page.tsx), so on mobile
+          this slide-in Sheet is the only way to reach contact details.
+          Opened by tapping the header avatar/name. */}
+      <Sheet open={mobileContactOpen} onOpenChange={setMobileContactOpen}>
+        <SheetContent side="right" className="w-full max-w-sm p-0 lg:hidden">
+          <SheetTitle className="sr-only">{displayName}</SheetTitle>
+          <ContactSidebar contact={contact} />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

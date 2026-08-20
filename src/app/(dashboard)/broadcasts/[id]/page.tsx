@@ -20,6 +20,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
   ArrowLeft,
   Loader2,
   Users,
@@ -195,6 +202,7 @@ export default function BroadcastDetailPage() {
   const [confirmSendNow, setConfirmSendNow] = useState(false);
   const [sendingNow, setSendingNow] = useState(false);
   const [cancelingSchedule, setCancelingSchedule] = useState(false);
+  const [previewRecipient, setPreviewRecipient] = useState<BroadcastRecipient | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -829,14 +837,21 @@ export default function BroadcastDetailPage() {
                       <TableCell className="text-muted-foreground">
                         {recipient.contact?.phone ?? '-'}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={
-                        template
-                          ? renderTemplateBody(template.body_text, recipient.template_params ?? [])
-                          : undefined
-                      }>
-                        {template
-                          ? renderTemplateBody(template.body_text, recipient.template_params ?? [])
-                          : '-'}
+                      <TableCell className="max-w-xs text-xs">
+                        {template ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewRecipient(recipient)}
+                            className="flex items-center gap-1.5 truncate text-muted-foreground hover:text-foreground hover:underline"
+                          >
+                            <Eye className="h-3 w-3 shrink-0" />
+                            <span className="truncate">
+                              {renderTemplateBody(template.body_text, recipient.template_params ?? [])}
+                            </span>
+                          </button>
+                        ) : (
+                          '-'
+                        )}
                       </TableCell>
                       <TableCell>
                         <span
@@ -871,6 +886,41 @@ export default function BroadcastDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Per-recipient message preview -- the exact rendered text that
+          recipient's send used (template_params is the frozen per-send
+          values, not the mapping config), so {{}} placeholders that
+          resolve differently per contact are shown correctly here
+          rather than truncated in the table cell. */}
+      <Dialog open={previewRecipient !== null} onOpenChange={(open) => !open && setPreviewRecipient(null)}>
+        <DialogContent className="bg-popover border-border sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-popover-foreground">
+              {previewRecipient?.contact?.name ?? 'Message preview'}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {previewRecipient?.contact?.phone}
+            </DialogDescription>
+          </DialogHeader>
+          {template && previewRecipient && (
+            <div className="rounded-lg bg-muted/50 p-3">
+              {template.header_type === 'text' && template.header_content && (
+                <p className="mb-1 text-sm font-semibold text-foreground">
+                  {template.header_content}
+                </p>
+              )}
+              <p className="whitespace-pre-wrap text-sm text-foreground">
+                {renderTemplateBody(template.body_text, previewRecipient.template_params ?? [])}
+              </p>
+              {template.footer_text && (
+                <p className="mt-1 text-xs italic text-muted-foreground">
+                  {template.footer_text}
+                </p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
