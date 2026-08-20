@@ -412,6 +412,51 @@ export async function setTwoStepPin(args: SetTwoStepPinArgs): Promise<void> {
   }
 }
 
+export interface WhatsappCommerceSettings {
+  is_catalog_visible: boolean
+  is_cart_enabled: boolean
+}
+
+/**
+ * GET /{phone_number_id}/whatsapp_commerce_settings -- the real,
+ * documented flag that gates catalog_message sends. Default is
+ * is_catalog_visible=false on a brand-new number/catalog pairing,
+ * separate from (and not automatically flipped by) the WhatsApp
+ * Manager UI's "Show catalogue icon in chat header" toggle.
+ */
+export async function getWhatsappCommerceSettings(args: {
+  phoneNumberId: string
+  accessToken: string
+}): Promise<WhatsappCommerceSettings | null> {
+  const { phoneNumberId, accessToken } = args
+  const url = `${META_API_BASE}/${phoneNumberId}/whatsapp_commerce_settings`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to read commerce settings.')
+  }
+  const data = (await response.json()) as { data?: WhatsappCommerceSettings[] }
+  return data.data?.[0] ?? null
+}
+
+/** POST /{phone_number_id}/whatsapp_commerce_settings?is_catalog_visible=true */
+export async function setWhatsappCommerceCatalogVisible(args: {
+  phoneNumberId: string
+  accessToken: string
+}): Promise<void> {
+  const { phoneNumberId, accessToken } = args
+  const url = `${META_API_BASE}/${phoneNumberId}/whatsapp_commerce_settings?is_catalog_visible=true`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    const bodyText = await response.text()
+    throw new Error(`Meta ${response.status}: ${bodyText}`)
+  }
+}
+
 /**
  * Register a phone number for inbound webhook events.
  *
