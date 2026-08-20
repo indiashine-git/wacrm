@@ -224,6 +224,7 @@
       "locationShared": "Location shared",
       "template": "Template",
       "buttonReply": "Button reply",
+      "formSubmitted": "Form submitted",
       "interactiveReply": "[Interactive reply]",
       "unsupported": "[Unsupported message type]",
       "aiBadge": "AI",

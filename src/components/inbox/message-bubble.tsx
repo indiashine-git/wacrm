@@ -11,6 +11,7 @@ import {
   LayoutTemplate,
   CornerDownLeft,
   Sparkles,
+  ClipboardCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ReplyQuote } from "./reply-quote";
@@ -55,6 +56,32 @@ function StatusIcon({ status }: { status: Message["status"] }) {
     default:
       return null;
   }
+}
+
+/**
+ * Parses the webhook's "[Form submitted]\nfield: value\n..." fallback
+ * text for a real Meta Flow submission back into ordered [key, value]
+ * pairs. Returns null for anything else so callers can fall back to
+ * the plain-text rendering unchanged.
+ */
+function parseFormSubmittedText(
+  text: string | null | undefined,
+): [string, string][] | null {
+  if (!text?.startsWith("[Form submitted]\n")) return null;
+  const body = text.slice("[Form submitted]\n".length);
+  const pairs: [string, string][] = [];
+  for (const line of body.split("\n")) {
+    const idx = line.indexOf(": ");
+    if (idx === -1) continue;
+    pairs.push([line.slice(0, idx), line.slice(idx + 2)]);
+  }
+  return pairs.length > 0 ? pairs : null;
+}
+
+/** "business_name" -> "Business name" */
+function formatFieldLabel(key: string): string {
+  const spaced = key.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function MessageContent({
@@ -187,6 +214,33 @@ function MessageContent({
         return <InteractivePreview payload={message.interactive_payload} />;
       }
       if (message.sender_type === "customer") {
+        // A real Meta WhatsApp Flow submission — webhook route encodes
+        // it as "[Form submitted]\nfield: value\n..." since there's no
+        // structured column for inbound flow data. Render the fields
+        // as a clean card instead of dumping that raw stacked text.
+        const flowFields = parseFormSubmittedText(message.content_text);
+        if (flowFields) {
+          return (
+            <div className="flex flex-col gap-1.5">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                <ClipboardCheck className="h-3 w-3" />
+                {t("formSubmitted")}
+              </span>
+              <dl className="space-y-1">
+                {flowFields
+                  .filter(([key]) => key !== "flow_token")
+                  .map(([key, value]) => (
+                    <div key={key} className="flex gap-1.5 text-sm">
+                      <dt className="shrink-0 font-medium text-foreground">
+                        {formatFieldLabel(key)}:
+                      </dt>
+                      <dd className="break-words">{value}</dd>
+                    </div>
+                  ))}
+              </dl>
+            </div>
+          );
+        }
         return (
           <div className="flex flex-col gap-0.5">
             <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
