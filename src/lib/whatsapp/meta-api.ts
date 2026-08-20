@@ -135,7 +135,13 @@ export async function debugAccessToken(inputToken: string): Promise<DebugAccessT
   if (!appId || !appSecret) {
     throw new Error('META_APP_ID / META_APP_SECRET not configured on the server.')
   }
-  const url = new URL(`${META_API_BASE}/debug_token`)
+  // Business Manager-level endpoints (this one, and the catalog/
+  // business calls below) behave differently for Business Integration
+  // System User tokens across Graph API versions -- v21.0 rejects them
+  // with a misleading "(#100) Missing Permission" even with the right
+  // scopes granted. META_API_BASE_LIBRARY (v23.0) is already proven
+  // reachable elsewhere in this file; using it here too.
+  const url = new URL(`${META_API_BASE_LIBRARY}/debug_token`)
   url.searchParams.set('input_token', inputToken)
   url.searchParams.set('access_token', `${appId}|${appSecret}`)
   const response = await fetch(url.toString())
@@ -217,7 +223,7 @@ export async function getUserBusinesses(
   args: GetUserBusinessesArgs
 ): Promise<{ id: string; name: string }[]> {
   const { accessToken } = args
-  const url = `${META_API_BASE}/me/businesses?fields=id,name`
+  const url = `${META_API_BASE_LIBRARY}/me/businesses?fields=id,name`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -238,7 +244,7 @@ export async function listOwnedCatalogs(
   args: ListOwnedCatalogsArgs
 ): Promise<{ id: string; name: string }[]> {
   const { businessId, accessToken } = args
-  const url = `${META_API_BASE}/${businessId}/owned_product_catalogs?fields=id,name`
+  const url = `${META_API_BASE_LIBRARY}/${businessId}/owned_product_catalogs?fields=id,name`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -260,7 +266,7 @@ export async function createProductCatalog(
   args: CreateProductCatalogArgs
 ): Promise<{ catalogId: string }> {
   const { businessId, accessToken, name } = args
-  const url = `${META_API_BASE}/${businessId}/owned_product_catalogs`
+  const url = `${META_API_BASE_LIBRARY}/${businessId}/owned_product_catalogs`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -285,7 +291,7 @@ export interface ConnectCatalogToWabaArgs {
 /** POST /{waba_id}/product_catalogs?catalog_id=X -- connects an existing catalog to this WhatsApp number. */
 export async function connectCatalogToWaba(args: ConnectCatalogToWabaArgs): Promise<void> {
   const { wabaId, catalogId, accessToken } = args
-  const url = `${META_API_BASE}/${wabaId}/product_catalogs?catalog_id=${encodeURIComponent(catalogId)}`
+  const url = `${META_API_BASE_LIBRARY}/${wabaId}/product_catalogs?catalog_id=${encodeURIComponent(catalogId)}`
   const response = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -1616,7 +1622,7 @@ export async function listCatalogProducts(
   args: ListCatalogProductsArgs
 ): Promise<CatalogProduct[]> {
   const { catalogId, accessToken } = args
-  const url = `${META_API_BASE}/${catalogId}/products?fields=id,retailer_id,name,description,price,currency,image_url,url,availability&limit=100`
+  const url = `${META_API_BASE_LIBRARY}/${catalogId}/products?fields=id,retailer_id,name,description,price,currency,image_url,url,availability&limit=100`
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -1646,7 +1652,7 @@ export async function createCatalogProduct(
 ): Promise<{ productId: string }> {
   const { catalogId, accessToken, retailerId, name, description, priceMinorUnits, currency, imageUrl, productUrl } =
     args
-  const url = `${META_API_BASE}/${catalogId}/products`
+  const url = `${META_API_BASE_LIBRARY}/${catalogId}/products`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -1694,7 +1700,7 @@ export async function updateCatalogProduct(args: UpdateCatalogProductArgs): Prom
   if (imageUrl !== undefined) body.image_url = imageUrl
   if (availability !== undefined) body.availability = availability
 
-  const url = `${META_API_BASE}/${productId}`
+  const url = `${META_API_BASE_LIBRARY}/${productId}`
   const response = await fetch(url, {
     method: 'POST',
     headers: {
@@ -1716,7 +1722,7 @@ export interface DeleteCatalogProductArgs {
 /** DELETE /{product_id} */
 export async function deleteCatalogProduct(args: DeleteCatalogProductArgs): Promise<void> {
   const { productId, accessToken } = args
-  const url = `${META_API_BASE}/${productId}`
+  const url = `${META_API_BASE_LIBRARY}/${productId}`
   const response = await fetch(url, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
