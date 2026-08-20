@@ -23,6 +23,7 @@ import {
   Users,
   UsersRound,
   Workflow,
+  LayoutTemplate,
   X,
   Zap,
 } from "lucide-react";
@@ -98,6 +99,7 @@ const navItems: NavItem[] = [
   { href: "/broadcasts", labelKey: "broadcasts", icon: Radio },
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow },
+  { href: "/meta-flows", labelKey: "metaFlows", icon: LayoutTemplate },
   { href: "/agents", labelKey: "aiAgents", icon: Bot },
 ];
 

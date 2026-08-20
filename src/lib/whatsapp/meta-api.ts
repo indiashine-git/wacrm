@@ -850,6 +850,51 @@ export async function createFlow(args: CreateFlowArgs): Promise<CreateFlowResult
   return { id: String(data.id) }
 }
 
+export interface MetaFlowSummary {
+  id: string
+  name: string
+  status: string
+  categories: string[]
+}
+
+export interface ListFlowsArgs {
+  wabaId: string
+  accessToken: string
+}
+
+/** List every real Meta WhatsApp Flow on this WABA (draft + published). */
+export async function listFlows(args: ListFlowsArgs): Promise<MetaFlowSummary[]> {
+  const { wabaId, accessToken } = args
+  const url = `${META_API_BASE_LIBRARY}/${wabaId}/flows?fields=id,name,status,categories&limit=100`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = (await response.json()) as { data?: MetaFlowSummary[] }
+  return data.data ?? []
+}
+
+export interface GetFlowPreviewUrlArgs {
+  flowId: string
+  accessToken: string
+}
+
+/** Meta-hosted preview link — renders the Flow outside WhatsApp's own client cache. */
+export async function getFlowPreviewUrl(args: GetFlowPreviewUrlArgs): Promise<string | null> {
+  const { flowId, accessToken } = args
+  const url = `${META_API_BASE_LIBRARY}/${flowId}?fields=preview.invalidate(false)`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, `Meta API error: ${response.status}`)
+  }
+  const data = (await response.json()) as { preview?: { preview_url?: string } }
+  return data.preview?.preview_url ?? null
+}
+
 export interface SendFlowMessageArgs {
   phoneNumberId: string
   accessToken: string
