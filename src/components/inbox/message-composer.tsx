@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
+import { EmojiPickerButton } from "./emoji-picker-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -220,6 +221,27 @@ export function MessageComposer({
     // Max 4 lines (~96px)
     el.style.height = `${Math.min(el.scrollHeight, 96)}px`;
   }, []);
+
+  const handleEmojiSelect = useCallback(
+    (emoji: string) => {
+      const el = textareaRef.current;
+      // Insert at the cursor, not just appended — matches how every
+      // native chat app's emoji picker behaves when text already
+      // exists on both sides of the caret.
+      const start = el?.selectionStart ?? text.length;
+      const end = el?.selectionEnd ?? text.length;
+      const next = text.slice(0, start) + emoji + text.slice(end);
+      setText(next);
+      requestAnimationFrame(() => {
+        if (!el) return;
+        el.focus();
+        const caret = start + emoji.length;
+        el.setSelectionRange(caret, caret);
+        adjustHeight();
+      });
+    },
+    [text, adjustHeight],
+  );
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
@@ -789,6 +811,10 @@ export function MessageComposer({
               )}
             </GatedButton>
           </div>
+
+          {!readOnly && !sessionExpired && (
+            <EmojiPickerButton onSelect={handleEmojiSelect} className="shrink-0" />
+          )}
 
           <textarea
             ref={textareaRef}
