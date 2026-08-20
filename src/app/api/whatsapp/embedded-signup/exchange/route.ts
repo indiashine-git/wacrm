@@ -138,15 +138,32 @@ export async function POST(request: Request) {
         : { data: null }
 
       if (profile?.account_id && !existingCommerce?.catalog_id) {
+        console.log('[embedded-signup/exchange] catalog: calling getUserBusinesses')
         const businesses = await getUserBusinesses({ accessToken })
+        console.log(
+          '[embedded-signup/exchange] catalog: getUserBusinesses returned',
+          businesses.length,
+          'businesses:',
+          businesses.map((b) => `${b.id} (${b.name})`).join(', '),
+        )
         const business = businesses[0]
         if (business) {
+          console.log(
+            '[embedded-signup/exchange] catalog: calling createProductCatalog for business',
+            business.id,
+          )
           const { catalogId: newCatalogId } = await createProductCatalog({
             businessId: business.id,
             accessToken,
             name: `${business.name} Catalog`,
           })
+          console.log(
+            '[embedded-signup/exchange] catalog: createProductCatalog succeeded, catalog id',
+            newCatalogId,
+            '-- now calling connectCatalogToWaba',
+          )
           await connectCatalogToWaba({ wabaId, catalogId: newCatalogId, accessToken })
+          console.log('[embedded-signup/exchange] catalog: connectCatalogToWaba succeeded')
           catalogId = newCatalogId
 
           await supabase
@@ -155,9 +172,15 @@ export async function POST(request: Request) {
               { account_id: profile.account_id, catalog_id: newCatalogId },
               { onConflict: 'account_id' },
             )
+          console.log('[embedded-signup/exchange] catalog: saved catalog_id to commerce_config')
+        } else {
+          console.log('[embedded-signup/exchange] catalog: skipped, getUserBusinesses returned no businesses')
         }
       } else if (existingCommerce?.catalog_id) {
+        console.log('[embedded-signup/exchange] catalog: skipped, account already has one:', existingCommerce.catalog_id)
         catalogId = existingCommerce.catalog_id
+      } else {
+        console.log('[embedded-signup/exchange] catalog: skipped, no profile/account_id resolved for this user')
       }
     } catch (err) {
       console.error('[embedded-signup/exchange] catalog auto-provisioning failed (non-blocking):', err)
