@@ -151,6 +151,82 @@ export async function assertWabaOwnsPhoneNumber(
 }
 
 // ============================================================
+// Commerce catalog auto-provisioning
+// ============================================================
+//
+// Run right after Embedded Signup so a business gets a real,
+// connected catalog without a manual Commerce Manager trip. Three
+// real Graph API calls (verified against Meta's own docs, not
+// guessed): list the businesses this token can act for, create a
+// catalog under one of them, then attach that catalog to the WABA.
+
+export interface GetUserBusinessesArgs {
+  accessToken: string
+}
+
+/** GET /me/businesses -- Business Manager accounts this token's user administers. */
+export async function getUserBusinesses(
+  args: GetUserBusinessesArgs
+): Promise<{ id: string; name: string }[]> {
+  const { accessToken } = args
+  const url = `${META_API_BASE}/me/businesses?fields=id,name`
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to list Business Manager accounts.')
+  }
+  const data = (await response.json()) as { data?: { id: string; name: string }[] }
+  return data.data ?? []
+}
+
+export interface CreateProductCatalogArgs {
+  businessId: string
+  accessToken: string
+  name: string
+}
+
+/** POST /{business_id}/owned_product_catalogs -- creates a new (empty) catalog. */
+export async function createProductCatalog(
+  args: CreateProductCatalogArgs
+): Promise<{ catalogId: string }> {
+  const { businessId, accessToken, name } = args
+  const url = `${META_API_BASE}/${businessId}/owned_product_catalogs`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ name }),
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to create product catalog.')
+  }
+  const data = (await response.json()) as { id: string }
+  return { catalogId: data.id }
+}
+
+export interface ConnectCatalogToWabaArgs {
+  wabaId: string
+  catalogId: string
+  accessToken: string
+}
+
+/** POST /{waba_id}/product_catalogs?catalog_id=X -- connects an existing catalog to this WhatsApp number. */
+export async function connectCatalogToWaba(args: ConnectCatalogToWabaArgs): Promise<void> {
+  const { wabaId, catalogId, accessToken } = args
+  const url = `${META_API_BASE}/${wabaId}/product_catalogs?catalog_id=${encodeURIComponent(catalogId)}`
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) {
+    await throwMetaError(response, 'Failed to connect catalog to WhatsApp account.')
+  }
+}
+
+// ============================================================
 // Cloud API registration (subscription for inbound webhooks)
 // ============================================================
 //

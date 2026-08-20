@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import {
   exchangeEmbeddedSignupCode,
   assertWabaOwnsPhoneNumber,
+  getUserBusinesses,
+  createProductCatalog,
+  connectCatalogToWaba,
 } from '@/lib/whatsapp/meta-api'
 
 /**
@@ -102,7 +105,56 @@ export async function POST(request: Request) {
       return NextResponse.json(saveBody, { status: saveRes.status })
     }
 
-    return NextResponse.json({ ...saveBody, pin })
+    // Best-effort catalog auto-provisioning -- a business that just
+    // connected WhatsApp gets a real, connected Commerce catalog
+    // without a manual Commerce Manager trip. Never blocks/fails the
+    // signup itself: a business without catalog_management granted,
+    // or with no Business Manager account yet, just ends up with no
+    // catalog (same as before this existed) rather than a broken
+    // connect flow.
+    let catalogId: string | null = null
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('account_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      const { data: existingCommerce } = profile?.account_id
+        ? await supabase
+            .from('commerce_config')
+            .select('catalog_id')
+            .eq('account_id', profile.account_id)
+            .maybeSingle()
+        : { data: null }
+
+      if (profile?.account_id && !existingCommerce?.catalog_id) {
+        const businesses = await getUserBusinesses({ accessToken })
+        const business = businesses[0]
+        if (business) {
+          const { catalogId: newCatalogId } = await createProductCatalog({
+            businessId: business.id,
+            accessToken,
+            name: `${business.name} Catalog`,
+          })
+          await connectCatalogToWaba({ wabaId, catalogId: newCatalogId, accessToken })
+          catalogId = newCatalogId
+
+          await supabase
+            .from('commerce_config')
+            .upsert(
+              { account_id: profile.account_id, catalog_id: newCatalogId },
+              { onConflict: 'account_id' },
+            )
+        }
+      } else if (existingCommerce?.catalog_id) {
+        catalogId = existingCommerce.catalog_id
+      }
+    } catch (err) {
+      console.error('[embedded-signup/exchange] catalog auto-provisioning failed (non-blocking):', err)
+    }
+
+    return NextResponse.json({ ...saveBody, pin, catalogId })
   } catch (error) {
     console.error('[embedded-signup/exchange] unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

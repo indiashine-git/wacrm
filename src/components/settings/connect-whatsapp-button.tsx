@@ -130,6 +130,9 @@ export function ConnectWhatsAppButton({ onConnected }: ConnectWhatsAppButtonProp
         return;
       }
       toast.success('WhatsApp connected');
+      if (body.catalogId) {
+        toast.success('Commerce catalog created and connected');
+      }
       onConnected({ pin: body.pin });
     } catch (err) {
       console.error('[ConnectWhatsAppButton] exchange error:', err);
