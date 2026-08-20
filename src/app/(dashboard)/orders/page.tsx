@@ -10,6 +10,8 @@ import {
   Send,
   CreditCard,
   Plus,
+  Check,
+  Copy,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -57,6 +59,7 @@ interface Order {
   customer_note: string | null;
   payment_status: "unpaid" | "link_sent" | "paid";
   payment_link: string | null;
+  payment_provider: "none" | "razorpay" | "upi";
   created_at: string;
   contact: { name: string | null; phone: string } | null;
 }
@@ -72,6 +75,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  const [markingFor, setMarkingFor] = useState<string | null>(null);
 
   const [sendOpen, setSendOpen] = useState(false);
   const [sendTo, setSendTo] = useState("");
@@ -119,6 +123,25 @@ export default function OrdersPage() {
       toast.error(err instanceof Error ? err.message : "Failed to generate payment link");
     } finally {
       setGeneratingFor(null);
+    }
+  }
+
+  async function handleMarkPaid(order: Order) {
+    setMarkingFor(order.id);
+    try {
+      const res = await fetch(`/api/commerce/orders/${order.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentStatus: "paid" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `Failed (HTTP ${res.status})`);
+      toast.success("Order marked as paid");
+      await fetchOrders();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update order");
+    } finally {
+      setMarkingFor(null);
     }
   }
 
@@ -243,26 +266,58 @@ export default function OrdersPage() {
                     {order.customer_note && (
                       <p className="mt-2 text-xs italic text-muted-foreground">"{order.customer_note}"</p>
                     )}
-                    <div className="mt-3 flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleGeneratePaymentLink(order)}
-                        disabled={generatingFor === order.id}
-                      >
-                        {generatingFor === order.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <CreditCard className="h-3.5 w-3.5" />
-                        )}
-                        {order.payment_status === "unpaid" ? "Send payment link" : "Resend payment link"}
-                      </Button>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {order.payment_status !== "paid" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleGeneratePaymentLink(order)}
+                          disabled={generatingFor === order.id}
+                        >
+                          {generatingFor === order.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <CreditCard className="h-3.5 w-3.5" />
+                          )}
+                          {order.payment_status === "unpaid" ? "Send payment link" : "Resend payment link"}
+                        </Button>
+                      )}
                       {order.payment_link && (
-                        <span className="truncate text-xs text-muted-foreground" title={order.payment_link}>
-                          {order.payment_link}
-                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.payment_link!);
+                            toast.success("Payment link copied");
+                          }}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          Copy link
+                        </Button>
+                      )}
+                      {order.payment_status !== "paid" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleMarkPaid(order)}
+                          disabled={markingFor === order.id}
+                          className="border-emerald-600/40 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-300"
+                        >
+                          {markingFor === order.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                          Mark as paid
+                        </Button>
                       )}
                     </div>
+                    {order.payment_status !== "paid" && order.payment_provider !== "razorpay" && (
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        UPI links can&apos;t auto-confirm payment -- once you see the money in your account,
+                        tap &quot;Mark as paid&quot; above.
+                      </p>
+                    )}
                   </div>
                 )}
               </li>
