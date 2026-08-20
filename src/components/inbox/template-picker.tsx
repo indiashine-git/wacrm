@@ -16,10 +16,18 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ArrowLeft,
   ChevronRight,
   LayoutTemplate,
   Loader2,
+  Search,
 } from "lucide-react";
 import { extractVariableIndices } from "@/lib/whatsapp/template-validators";
 import { useTranslations } from "next-intl";
@@ -83,6 +91,9 @@ export function TemplatePicker({
 
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sort, setSort] = useState<"newest" | "oldest" | "name">("newest");
   const [selected, setSelected] = useState<MessageTemplate | null>(null);
   const [params, setParams] = useState<string[]>([]);
   const [headerText, setHeaderText] = useState<string>("");
@@ -174,6 +185,30 @@ export function TemplatePicker({
     handleOpenChange(false);
   }
 
+  const templateCategories = useMemo(
+    () => Array.from(new Set(templates.map((tpl) => tpl.category))).sort(),
+    [templates],
+  );
+
+  const visibleTemplates = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    let list = templates.filter((tpl) => {
+      if (categoryFilter !== "all" && tpl.category !== categoryFilter) return false;
+      if (!query) return true;
+      return (
+        tpl.name.toLowerCase().includes(query) ||
+        (tpl.body_text ?? "").toLowerCase().includes(query)
+      );
+    });
+    list = [...list].sort((a, b) => {
+      if (sort === "name") return a.name.localeCompare(b.name);
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return sort === "oldest" ? aTime - bTime : bTime - aTime;
+    });
+    return list;
+  }, [templates, search, categoryFilter, sort]);
+
   const slots = useMemo(
     () => (selected ? collectVariableSlots(selected) : null),
     [selected],
@@ -203,20 +238,69 @@ export function TemplatePicker({
         </DialogHeader>
 
         {!selected ? (
-          <div className="max-h-[60vh] space-y-2 overflow-y-auto">
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          <div className="space-y-2">
+            {!loading && templates.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[140px] flex-1">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder={t("searchPlaceholder")}
+                    className="h-8 border-border bg-muted pl-8 text-xs text-foreground placeholder:text-muted-foreground"
+                  />
+                </div>
+                <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v || "all")}>
+                  <SelectTrigger className="h-8 w-32 border-border bg-muted text-xs text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-border bg-popover">
+                    <SelectItem value="all" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                      {t("allCategories")}
+                    </SelectItem>
+                    {templateCategories.map((cat) => (
+                      <SelectItem key={cat} value={cat} className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={sort} onValueChange={(v) => setSort((v || "newest") as typeof sort)}>
+                  <SelectTrigger className="h-8 w-28 border-border bg-muted text-xs text-foreground">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-border bg-popover">
+                    <SelectItem value="newest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                      {t("sortNewest")}
+                    </SelectItem>
+                    <SelectItem value="oldest" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                      {t("sortOldest")}
+                    </SelectItem>
+                    <SelectItem value="name" className="text-popover-foreground focus:bg-muted focus:text-popover-foreground">
+                      {t("sortName")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            ) : templates.length === 0 ? (
-              <div className="rounded-md border border-border bg-background/50 p-6 text-center">
-                <p className="text-sm text-popover-foreground">{t("noApprovedTemplates")}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("noApprovedTemplatesHint")}
-                </p>
-              </div>
-            ) : (
-              templates.map((t) => (
+            )}
+            <div className="max-h-[52vh] space-y-2 overflow-y-auto">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="rounded-md border border-border bg-background/50 p-6 text-center">
+                  <p className="text-sm text-popover-foreground">{t("noApprovedTemplates")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t("noApprovedTemplatesHint")}
+                  </p>
+                </div>
+              ) : visibleTemplates.length === 0 ? (
+                <div className="rounded-md border border-border bg-background/50 p-6 text-center">
+                  <p className="text-sm text-popover-foreground">{t("noMatches")}</p>
+                </div>
+              ) : (
+                visibleTemplates.map((t) => (
                 <button
                   key={t.id}
                   type="button"
@@ -246,7 +330,8 @@ export function TemplatePicker({
                   </div>
                 </button>
               ))
-            )}
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-3">

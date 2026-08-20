@@ -22,6 +22,7 @@ import {
   Plus,
   MessageSquareDashed,
   Zap,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
@@ -152,6 +153,10 @@ export function MessageComposer({
 
   // Interactive-message builder dialog + quick-reply picker.
   const [interactiveOpen, setInteractiveOpen] = useState(false);
+  // True only when the builder was opened by picking an interactive
+  // quick reply — drives the "Back to quick replies" affordance so
+  // that path isn't a dead end with no way back to the list.
+  const [interactiveFromQuickReply, setInteractiveFromQuickReply] = useState(false);
   const [interactivePayload, setInteractivePayload] =
     useState<InteractiveMessagePayload>(blankButtonsPayload);
   const [savingQuickReply, setSavingQuickReply] = useState(false);
@@ -324,8 +329,9 @@ export function MessageComposer({
   // ---- Interactive message + quick replies --------------------------
 
   const openInteractiveBuilder = useCallback(
-    (seed?: InteractiveMessagePayload) => {
+    (seed?: InteractiveMessagePayload, fromQuickReply = false) => {
       setInteractivePayload(seed ?? blankButtonsPayload());
+      setInteractiveFromQuickReply(fromQuickReply);
       setInteractiveOpen(true);
     },
     [],
@@ -383,7 +389,7 @@ export function MessageComposer({
     (qr: QuickReply) => {
       setQuickReplyOpen(false);
       if (qr.kind === "interactive" && qr.interactive_payload) {
-        openInteractiveBuilder(qr.interactive_payload);
+        openInteractiveBuilder(qr.interactive_payload, true);
         return;
       }
       const body = qr.content_text ?? "";
@@ -869,6 +875,19 @@ export function MessageComposer({
       <Dialog open={interactiveOpen} onOpenChange={setInteractiveOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
+            {interactiveFromQuickReply ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setInteractiveOpen(false);
+                  setQuickReplyOpen(true);
+                }}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                {t("backToQuickReplies")}
+              </button>
+            ) : null}
             <DialogTitle>{t("interactiveMessage")}</DialogTitle>
           </DialogHeader>
           <div className="max-h-[70vh] overflow-y-auto">
