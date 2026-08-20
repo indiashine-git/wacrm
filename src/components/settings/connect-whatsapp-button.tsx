@@ -57,6 +57,7 @@ const TRUSTED_ORIGINS = ['https://www.facebook.com', 'https://business.facebook.
 interface SessionData {
   waba_id?: string;
   phone_number_id?: string;
+  business_id?: string;
 }
 
 function loadFbSdk(appId: string): Promise<void> {
@@ -121,6 +122,7 @@ export function ConnectWhatsAppButton({ onConnected }: ConnectWhatsAppButtonProp
           code,
           wabaId: session.waba_id,
           phoneNumberId: session.phone_number_id,
+          businessId: session.business_id,
         }),
       });
       const body = await res.json();

@@ -35,6 +35,7 @@ export function CommercePanel() {
   const [hasRazorpaySecret, setHasRazorpaySecret] = useState(false);
 
   const [catalogId, setCatalogId] = useState('');
+  const [creatingCatalog, setCreatingCatalog] = useState(false);
   const [provider, setProvider] = useState<PaymentProvider>('none');
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
@@ -92,6 +93,21 @@ export function CommercePanel() {
     }
   }
 
+  async function handleCreateCatalog() {
+    setCreatingCatalog(true);
+    try {
+      const res = await fetch('/api/commerce/catalog/create', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to create catalog');
+      setCatalogId(data.catalogId);
+      toast.success('Catalog created and connected');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create catalog', { duration: 8000 });
+    } finally {
+      setCreatingCatalog(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -112,36 +128,27 @@ export function CommercePanel() {
           <CardHeader>
             <CardTitle className="text-sm">Catalog</CardTitle>
             <CardDescription>
-              A catalog is the list of products WhatsApp shows your customers. WATU can&apos;t create one for
-              you yet -- Meta requires that step to happen in their own Commerce Manager.
+              A catalog is the list of products WhatsApp shows your customers.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
-              <li>
-                Open{' '}
-                <a
-                  href="https://business.facebook.com/commerce/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  Meta Commerce Manager
-                </a>{' '}
-                and create a catalog (or pick an existing one).
-              </li>
-              <li>In that catalog&apos;s settings, connect it to this WhatsApp number.</li>
-              <li>
-                Back in Commerce Manager, open <span className="text-foreground">Catalog settings</span> --
-                the number under the catalog name is its ID. Copy it and paste it below.
-              </li>
-            </ol>
+            {!catalogId.trim() && canEditSettings && (
+              <Button
+                type="button"
+                onClick={handleCreateCatalog}
+                disabled={creatingCatalog}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {creatingCatalog ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Create my catalog
+              </Button>
+            )}
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Catalog ID</Label>
               <Input
                 value={catalogId}
                 onChange={(e) => setCatalogId(e.target.value)}
-                placeholder="e.g. 123456789012345"
+                placeholder="Created automatically, or paste one from Meta Commerce Manager"
                 disabled={!canEditSettings}
                 className="bg-muted border-border text-foreground"
               />
@@ -152,6 +159,30 @@ export function CommercePanel() {
                 catalog on WhatsApp -- that delay is on Meta&apos;s side, not WATU.
               </p>
             )}
+            <details className="text-xs text-muted-foreground">
+              <summary className="cursor-pointer select-none hover:text-foreground">
+                Prefer to do it manually, or the button above failed?
+              </summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-4">
+                <li>
+                  Open{' '}
+                  <a
+                    href="https://business.facebook.com/commerce/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Meta Commerce Manager
+                  </a>{' '}
+                  and create a catalog (or pick an existing one).
+                </li>
+                <li>In that catalog&apos;s settings, connect it to this WhatsApp number.</li>
+                <li>
+                  Back in Commerce Manager, open <span className="text-foreground">Catalog settings</span>{' '}
+                  -- the number under the catalog name is its ID. Copy it and paste it above.
+                </li>
+              </ol>
+            </details>
           </CardContent>
         </Card>
 

@@ -46,10 +46,11 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { code, wabaId, phoneNumberId } = body as {
+    const { code, wabaId, phoneNumberId, businessId } = body as {
       code?: string
       wabaId?: string
       phoneNumberId?: string
+      businessId?: string
     }
     if (!code || !wabaId || !phoneNumberId) {
       return NextResponse.json(
@@ -114,6 +115,17 @@ export async function POST(request: Request) {
       return NextResponse.json(saveBody, { status: saveRes.status })
     }
 
+    // Meta hands back business_id in the same postMessage session as
+    // waba_id/phone_number_id -- storing it means catalog creation
+    // never needs the business_management permission (getUserBusinesses
+    // below), which has proven unreliable to get granted on the token.
+    if (businessId) {
+      await supabase
+        .from('whatsapp_config')
+        .update({ business_id: businessId })
+        .eq('phone_number_id', phoneNumberId)
+    }
+
     // Best-effort catalog auto-provisioning -- a business that just
     // connected WhatsApp gets a real, connected Commerce catalog
     // without a manual Commerce Manager trip. Never blocks/fails the
@@ -138,24 +150,31 @@ export async function POST(request: Request) {
         : { data: null }
 
       if (profile?.account_id && !existingCommerce?.catalog_id) {
-        console.log('[embedded-signup/exchange] catalog: calling getUserBusinesses')
-        const businesses = await getUserBusinesses({ accessToken })
-        console.log(
-          '[embedded-signup/exchange] catalog: getUserBusinesses returned',
-          businesses.length,
-          'businesses:',
-          businesses.map((b) => `${b.id} (${b.name})`).join(', '),
-        )
-        const business = businesses[0]
-        if (business) {
+        // Prefer the business_id Meta already handed back in this
+        // signup's postMessage session -- getUserBusinesses needs
+        // business_management, which has repeatedly failed to land on
+        // the token even when requested in the login config.
+        let resolvedBusinessId = businessId ?? null
+        if (!resolvedBusinessId) {
+          console.log('[embedded-signup/exchange] catalog: no businessId from signup session, falling back to getUserBusinesses')
+          const businesses = await getUserBusinesses({ accessToken })
+          console.log(
+            '[embedded-signup/exchange] catalog: getUserBusinesses returned',
+            businesses.length,
+            'businesses:',
+            businesses.map((b) => `${b.id} (${b.name})`).join(', '),
+          )
+          resolvedBusinessId = businesses[0]?.id ?? null
+        }
+        if (resolvedBusinessId) {
           console.log(
             '[embedded-signup/exchange] catalog: calling createProductCatalog for business',
-            business.id,
+            resolvedBusinessId,
           )
           const { catalogId: newCatalogId } = await createProductCatalog({
-            businessId: business.id,
+            businessId: resolvedBusinessId,
             accessToken,
-            name: `${business.name} Catalog`,
+            name: 'WATU Catalog',
           })
           console.log(
             '[embedded-signup/exchange] catalog: createProductCatalog succeeded, catalog id',
