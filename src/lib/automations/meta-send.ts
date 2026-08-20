@@ -95,14 +95,19 @@ export async function engineSendInteractive(
       buttons: payload.buttons,
     })
   }
-  return engineSendInteractiveList({
-    ...common,
-    bodyText: payload.body,
-    buttonLabel: payload.button_label,
-    headerText: payload.header,
-    footerText: payload.footer,
-    sections: payload.sections,
-  })
+  if (payload.kind === 'list') {
+    return engineSendInteractiveList({
+      ...common,
+      bodyText: payload.body,
+      buttonLabel: payload.button_label,
+      headerText: payload.header,
+      footerText: payload.footer,
+      sections: payload.sections,
+    })
+  }
+  // cta_url is only ever produced by the payment-link flow, which sends
+  // directly via sendMessageToConversation -- automations never build one.
+  throw new Error('cta_url interactive messages are not supported in automations.')
 }
 
 type SendInput =

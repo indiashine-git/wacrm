@@ -13,6 +13,8 @@ import type {
   ContactCustomValue,
   PipelineStage,
 } from "@/types";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { addContactTag, deleteContactTag } from "@/lib/contacts/tag-api";
 import {
   Phone,
@@ -29,6 +31,7 @@ import {
   Pencil,
   Megaphone,
   ClipboardList,
+  ShoppingBag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +59,29 @@ interface ContactSidebarProps {
   contact: Contact | null;
 }
 
+interface OrderItem {
+  product_retailer_id: string;
+  quantity: number;
+  item_price: number;
+  currency: string;
+}
+
+interface ContactOrder {
+  id: string;
+  items: OrderItem[];
+  total_amount: number;
+  currency: string;
+  payment_status: "unpaid" | "link_sent" | "paid";
+  payment_link: string | null;
+  created_at: string;
+}
+
+const ORDER_STATUS_CLASSES: Record<ContactOrder["payment_status"], string> = {
+  unpaid: "border-border bg-muted text-muted-foreground",
+  link_sent: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300",
+  paid: "border-emerald-600/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
+};
+
 export function ContactSidebar({ contact }: ContactSidebarProps) {
   const tSidebar = useTranslations("Inbox.sidebar");
   const tThread = useTranslations("Inbox.messageThread");
@@ -65,6 +91,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tasks, setTasks] = useState<ContactTask[]>([]);
+  const [orders, setOrders] = useState<ContactOrder[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
   const [addingTask, setAddingTask] = useState(false);
@@ -101,7 +128,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes, tasksRes] = await Promise.all([
+    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes, tasksRes, ordersRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -130,11 +157,17 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         .eq("contact_id", contact.id)
         .order("status", { ascending: true })
         .order("due_at", { ascending: true, nullsFirst: false }),
+      supabase
+        .from("orders")
+        .select("*")
+        .eq("contact_id", contact.id)
+        .order("created_at", { ascending: false }),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
     if (tasksRes.data) setTasks(tasksRes.data);
+    if (ordersRes.data) setOrders(ordersRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -608,6 +641,68 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                 )}
               </div>
             </div>
+
+            {/* Orders — same compact/expand pattern as Deals. Read-only
+                here; full management (send/resend link, mark paid)
+                stays on the Orders page. */}
+            {orders.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <ShoppingBag className="h-3 w-3" />
+                  Orders
+                </div>
+                <div className="mt-2">
+                  <Accordion className="space-y-1.5">
+                    {orders.map((order) => (
+                      <AccordionItem
+                        key={order.id}
+                        value={order.id}
+                        className="overflow-hidden rounded-lg bg-muted"
+                      >
+                        <AccordionTrigger className="px-3 py-2 text-sm font-medium text-foreground hover:no-underline">
+                          <span className="flex min-w-0 flex-1 items-center justify-between gap-2 pr-2">
+                            <span className="truncate text-left">
+                              {order.items.length} item{order.items.length === 1 ? "" : "s"} ·{" "}
+                              {order.currency} {order.total_amount.toFixed(2)}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={cn("shrink-0 text-[10px]", ORDER_STATUS_CLASSES[order.payment_status])}
+                            >
+                              {order.payment_status.replace("_", " ")}
+                            </Badge>
+                          </span>
+                        </AccordionTrigger>
+                        <AccordionContent className="space-y-1 px-3 pb-3 text-xs text-muted-foreground">
+                          {order.items.map((item, i) => (
+                            <div key={i} className="flex justify-between">
+                              <span>
+                                {item.quantity}x {item.product_retailer_id}
+                              </span>
+                              <span>
+                                {item.currency} {(item.item_price * item.quantity).toFixed(2)}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between border-t border-border pt-1 font-medium text-foreground">
+                            <span>Total</span>
+                            <span>
+                              {order.currency} {order.total_amount.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Placed</span>
+                            <span className="text-foreground">
+                              {format(new Date(order.created_at), "MMM d, yyyy")}
+                            </span>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="details" className="space-y-4 p-4">

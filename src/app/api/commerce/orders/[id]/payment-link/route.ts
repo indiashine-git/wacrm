@@ -99,11 +99,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .eq('id', orderId)
 
     try {
-      await sendMessageToConversation(supabase, accountId, {
-        conversationId: order.conversation_id,
-        messageType: 'text',
-        contentText: `Here's your payment link for order ${orderId.slice(0, 8)} (${currency} ${amount.toFixed(2)}):\n${paymentLink}`,
-      })
+      // Meta's cta_url button is only confirmed to accept http(s) URLs
+      // (Razorpay's short_url qualifies). A raw upi:// deep link is an
+      // unconfirmed edge case there, so it keeps using a plain text
+      // message -- WhatsApp's own auto-link-detection already opens it
+      // fine on tap, and that's the exact path a real payment succeeded
+      // through tonight.
+      if (paymentLink.startsWith('http://') || paymentLink.startsWith('https://')) {
+        await sendMessageToConversation(supabase, accountId, {
+          conversationId: order.conversation_id,
+          messageType: 'interactive',
+          interactivePayload: {
+            kind: 'cta_url',
+            body: `Your order ${orderId.slice(0, 8)} is ready for payment: ${currency} ${amount.toFixed(2)}.`,
+            display_text: 'Pay now',
+            url: paymentLink,
+          },
+        })
+      } else {
+        await sendMessageToConversation(supabase, accountId, {
+          conversationId: order.conversation_id,
+          messageType: 'text',
+          contentText: `Here's your payment link for order ${orderId.slice(0, 8)} (${currency} ${amount.toFixed(2)}):\n${paymentLink}`,
+        })
+      }
     } catch (sendErr) {
       // The link was generated and saved -- surface the send failure
       // separately rather than losing the link entirely.

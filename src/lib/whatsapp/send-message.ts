@@ -27,6 +27,7 @@ import {
   sendMediaMessage,
   sendInteractiveButtons,
   sendInteractiveList,
+  sendCtaUrlButton,
   type MediaKind,
 } from '@/lib/whatsapp/meta-api';
 import {
@@ -375,6 +376,20 @@ export async function sendMessageToConversation(
           headerText: p.header || undefined,
           footerText: p.footer || undefined,
           buttons: p.buttons,
+          contextMessageId,
+        });
+        return result.messageId;
+      }
+      if (p.kind === 'cta_url') {
+        const result = await sendCtaUrlButton({
+          phoneNumberId: config.phone_number_id,
+          accessToken,
+          to: phone,
+          bodyText: p.body,
+          headerText: p.header || undefined,
+          footerText: p.footer || undefined,
+          displayText: p.display_text,
+          url: p.url,
           contextMessageId,
         });
         return result.messageId;

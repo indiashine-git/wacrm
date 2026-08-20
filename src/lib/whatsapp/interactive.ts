@@ -68,9 +68,21 @@ export interface InteractiveListPayload {
   sections: InteractiveListSection[]
 }
 
+export interface InteractiveCtaUrlPayload {
+  kind: 'cta_url'
+  body: string
+  header?: string
+  footer?: string
+  /** Button label (≤ 20 chars per Meta). */
+  display_text: string
+  /** The URL opened when the button is tapped. */
+  url: string
+}
+
 export type InteractiveMessagePayload =
   | InteractiveButtonsPayload
   | InteractiveListPayload
+  | InteractiveCtaUrlPayload
 
 export type InteractiveValidation =
   | { ok: true }
@@ -223,7 +235,23 @@ export function validateInteractivePayload(
     return ok()
   }
 
-  return fail('Interactive message must be reply buttons or a list.')
+  if (p.kind === 'cta_url') {
+    const cta = p as InteractiveCtaUrlPayload
+    if (typeof cta.display_text !== 'string' || cta.display_text.trim() === '') {
+      return fail('The button needs a label.')
+    }
+    if (cta.display_text.length > INTERACTIVE_LIMITS.buttonTitleMaxLength) {
+      return fail(
+        `Button label "${cta.display_text}" exceeds the ${INTERACTIVE_LIMITS.buttonTitleMaxLength}-character limit.`,
+      )
+    }
+    if (typeof cta.url !== 'string' || cta.url.trim() === '') {
+      return fail('The button needs a URL.')
+    }
+    return ok()
+  }
+
+  return fail('Interactive message must be reply buttons, a list, or a URL button.')
 }
 
 /**
@@ -235,5 +263,7 @@ export function interactivePayloadPreviewText(
 ): string {
   const body = payload.body?.trim()
   if (body) return body
-  return payload.kind === 'buttons' ? '[buttons]' : '[list]'
+  if (payload.kind === 'buttons') return '[buttons]'
+  if (payload.kind === 'list') return '[list]'
+  return '[button]'
 }
