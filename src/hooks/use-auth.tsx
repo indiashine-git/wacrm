@@ -43,6 +43,8 @@ interface AccountSummary {
   /** Default deal currency (ISO-4217). NOT NULL DEFAULT 'USD' in the
    *  DB (migration 021); narrowed to DEFAULT_CURRENCY when absent. */
   default_currency: string;
+  /** Minutes of no activity before auto sign-out. Null/0 = disabled (migration 052). */
+  idle_timeout_minutes: number | null;
 }
 
 /**
@@ -239,7 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from("accounts")
             // default_currency added in migration 021; narrowed to the
             // USD fallback below for older schemas where it reads null.
-            .select("id, name, default_currency")
+            .select("id, name, default_currency, idle_timeout_minutes")
             .eq("id", data.account_id)
             .maybeSingle();
           if (accountErr) {
@@ -254,6 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: account.id,
               name: account.name,
               default_currency: account.default_currency ?? DEFAULT_CURRENCY,
+              idle_timeout_minutes: account.idle_timeout_minutes ?? null,
             };
           }
         }
@@ -388,6 +391,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccount(null);
     window.location.href = "/login";
   }, []);
+
+  // Auto sign-out after N minutes of no activity, per the account's
+  // idle_timeout_minutes (Settings → Login & security, admin-set).
+  // Real activity only -- mouse/keyboard/touch/scroll -- so a message
+  // silently arriving or a background tab doesn't reset the clock.
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const minutes = account?.idle_timeout_minutes;
+    if (!user || !minutes || minutes <= 0) return;
+
+    const timeoutMs = minutes * 60 * 1000;
+
+    function resetTimer() {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        signOut();
+      }, timeoutMs);
+    }
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"] as const;
+    events.forEach((event) => window.addEventListener(event, resetTimer, { passive: true }));
+    resetTimer();
+
+    return () => {
+      events.forEach((event) => window.removeEventListener(event, resetTimer));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [user, account?.idle_timeout_minutes, signOut]);
 
   const refreshProfile = useCallback(async () => {
     if (!user?.id) return;
