@@ -3,15 +3,23 @@
 import { useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import type { CustomField } from '@/types';
 import {
   dedupeByPhone,
   isUniqueViolation,
   normalizeKey,
 } from '@/lib/contacts/dedupe';
+import { parseGenericCsv } from '@/lib/contacts/parse-generic-csv';
 import {
-  parseContactCsv,
-  type ParsedContactRow,
-} from '@/lib/contacts/parse-contact-csv';
+  SYSTEM_FIELDS,
+  customFieldTargets,
+  guessColumnMapping,
+  applyMapping,
+  validateRow,
+  type MappedRow,
+  type RowValidation,
+} from '@/lib/contacts/import-fields';
+import { buildSampleCsv, downloadSampleCsv } from '@/lib/contacts/sample-csv';
 import {
   assignImportedContactTags,
   resolveImportTagIds,
@@ -28,6 +36,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Upload,
   FileText,
@@ -35,12 +51,17 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Tag,
+  Download,
+  Trash2,
+  ArrowLeft,
 } from 'lucide-react';
-import { useTranslations } from 'next-intl';
 
-const DEFAULT_TAG_COLOR = '#3b82f6';
-const PREVIEW_LIMIT = 5;
+type Step = 'upload' | 'map' | 'preview' | 'result';
+
+interface PreviewRow {
+  mapped: MappedRow;
+  validation: RowValidation;
+}
 
 function truncateFilename(name: string, max = 48): string {
   if (name.length <= max) return name;
@@ -50,108 +71,52 @@ function truncateFilename(name: string, max = 48): string {
   return `${base.slice(0, Math.max(keep, 12))}…${ext}`;
 }
 
-function PreviewCell({
-  value,
-  mono,
-  maxWidth = 'max-w-[9rem]',
-}: {
-  value: string;
-  mono?: boolean;
-  maxWidth?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        'block truncate',
-        maxWidth,
-        mono && 'font-mono text-[11px]'
-      )}
-      title={value}
-    >
-      {value}
-    </span>
-  );
-}
-
-function ImportPreviewTags({
-  tagNames,
-  tagColorByKey,
-}: {
-  tagNames: string[];
-  tagColorByKey: Map<string, string>;
-}) {
-  const t = useTranslations('Contacts.importModal');
-
-  if (tagNames.length === 0) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-
-  return (
-    <div className="flex min-w-[4.5rem] flex-wrap gap-1">
-      {tagNames.map((name) => {
-        const color =
-          tagColorByKey.get(name.trim().toLowerCase()) ?? DEFAULT_TAG_COLOR;
-        const isKnown = tagColorByKey.has(name.trim().toLowerCase());
-        return (
-          <span
-            key={name}
-            className="inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[10px] leading-none font-medium"
-            style={{
-              backgroundColor: `${color}18`,
-              color,
-              border: `1px solid ${color}${isKnown ? '55' : '30'}`,
-            }}
-            title={isKnown ? name : t('willBeCreated', { name })}
-          >
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            <span className="truncate">{name}</span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 interface ImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImported: () => void;
 }
 
-export function ImportModal({
-  open,
-  onOpenChange,
-  onImported,
-}: ImportModalProps) {
-  const t = useTranslations('Contacts.importModal');
+export function ImportModal({ open, onOpenChange, onImported }: ImportModalProps) {
   const supabase = createClient();
   const { accountId, canEditSettings } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [step, setStep] = useState<Step>('upload');
   const [file, setFile] = useState<File | null>(null);
-  const [parsedRows, setParsedRows] = useState<ParsedContactRow[]>([]);
-  const [hasTagsColumn, setHasTagsColumn] = useState(false);
-  const [hasCompanyColumn, setHasCompanyColumn] = useState(false);
-  const [tagColorByKey, setTagColorByKey] = useState<Map<string, string>>(
-    new Map()
-  );
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
+
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rawRows, setRawRows] = useState<string[][]>([]);
+  const [columnMapping, setColumnMapping] = useState<Record<number, string>>({});
+
+  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  const [existingPhones, setExistingPhones] = useState<Set<string>>(new Set());
+  const [bulkConsent, setBulkConsent] = useState(false);
+
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{
     imported: number;
+    leads: number;
+    customers: number;
     skipped: number;
     failed: number;
     tagsAssigned: number;
   } | null>(null);
 
+  const mappingTargets = useMemo(
+    () => [...SYSTEM_FIELDS, ...customFieldTargets(customFields)],
+    [customFields],
+  );
+
   function reset() {
+    setStep('upload');
     setFile(null);
-    setParsedRows([]);
-    setHasTagsColumn(false);
-    setHasCompanyColumn(false);
-    setTagColorByKey(new Map());
+    setHeaders([]);
+    setRawRows([]);
+    setColumnMapping({});
+    setPreviewRows([]);
+    setBulkConsent(false);
     setResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
@@ -163,50 +128,86 @@ export function ImportModal({
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
-    if (!selected) return;
-
+    if (!selected || !accountId) return;
     setFile(selected);
     setResult(null);
 
     const text = await selected.text();
-    const {
-      rows,
-      hasTagsColumn: csvHasTags,
-      hasCompanyColumn: csvHasCompany,
-    } = parseContactCsv(text);
-
-    if (rows.length === 0) {
-      toast.error(t('toastNoValidRows'));
-      setParsedRows([]);
-      setHasTagsColumn(false);
-      setHasCompanyColumn(false);
-      setTagColorByKey(new Map());
+    const { headers: parsedHeaders, rows } = parseGenericCsv(text);
+    if (parsedHeaders.length === 0 || rows.length === 0) {
+      toast.error('Could not find any rows in that file.');
       return;
     }
 
-    setParsedRows(rows);
-    setHasTagsColumn(csvHasTags);
-    setHasCompanyColumn(csvHasCompany);
+    const { data: fields } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('account_id', accountId);
+    const cf = fields ?? [];
+    setCustomFields(cf);
 
-    if (csvHasTags && accountId) {
-      const { data: tags } = await supabase
-        .from('tags')
-        .select('name, color')
-        .eq('account_id', accountId);
-
-      const colors = new Map<string, string>();
-      for (const tag of tags ?? []) {
-        const key = tag.name.trim().toLowerCase();
-        if (!colors.has(key)) colors.set(key, tag.color);
-      }
-      setTagColorByKey(colors);
-    } else {
-      setTagColorByKey(new Map());
-    }
+    setHeaders(parsedHeaders);
+    setRawRows(rows);
+    setColumnMapping(guessColumnMapping(parsedHeaders, cf));
+    setStep('map');
   }
 
+  function proceedToPreview() {
+    const hasPhone = Object.values(columnMapping).includes('phone');
+    if (!hasPhone) {
+      toast.error('Map at least one column to Phone before continuing.');
+      return;
+    }
+    buildPreview(columnMapping);
+  }
+
+  async function buildPreview(mapping: Record<number, string>) {
+    if (!accountId) return;
+    const { data: existingRows } = await supabase
+      .from('contacts')
+      .select('phone_normalized')
+      .eq('account_id', accountId);
+    const existing = new Set(
+      (existingRows ?? [])
+        .map((r) => (r as { phone_normalized: string | null }).phone_normalized)
+        .filter((p): p is string => !!p),
+    );
+    setExistingPhones(existing);
+
+    const seen = new Set<string>();
+    const built = rawRows.map((raw) => {
+      const mapped = applyMapping(raw, mapping);
+      const validation = validateRow(mapped, seen, existing);
+      return { mapped, validation };
+    });
+    setPreviewRows(built);
+    setStep('preview');
+  }
+
+  function revalidateAll(rows: PreviewRow[]): PreviewRow[] {
+    const seen = new Set<string>();
+    return rows.map(({ mapped }) => ({
+      mapped,
+      validation: validateRow(mapped, seen, existingPhones),
+    }));
+  }
+
+  function updateCell(index: number, patch: Partial<MappedRow>) {
+    setPreviewRows((prev) => {
+      const next = prev.map((r, i) => (i === index ? { ...r, mapped: { ...r.mapped, ...patch } } : r));
+      return revalidateAll(next);
+    });
+  }
+
+  function deleteRow(index: number) {
+    setPreviewRows((prev) => revalidateAll(prev.filter((_, i) => i !== index)));
+  }
+
+  const errorRowCount = previewRows.filter((r) => Object.keys(r.validation.errors).length > 0).length;
+  const importableCount = previewRows.length - errorRowCount;
+
   async function handleImport() {
-    if (parsedRows.length === 0) return;
+    if (!accountId || previewRows.length === 0) return;
     setImporting(true);
 
     try {
@@ -215,42 +216,19 @@ export function ImportModal({
       } = await supabase.auth.getSession();
       const user = session?.user;
       if (!user) throw new Error('Not authenticated');
-      if (!accountId)
-        throw new Error('Your profile is not linked to an account.');
 
+      const importable = previewRows.filter((r) => Object.keys(r.validation.errors).length === 0);
+      const skipped = previewRows.length - importable.length;
       let imported = 0;
-      let skipped = 0;
       let failed = 0;
+      let leads = 0;
+      let customers = 0;
 
-      // 1) De-dupe within the file by normalized phone (keep first).
-      const { unique, duplicates: inFileDupes } = dedupeByPhone(parsedRows);
-      skipped += inFileDupes;
+      const nowIso = new Date().toISOString();
+      const tagAssignments: ContactTagAssignment[] = [];
+      const customValueRows: { contact_id: string; custom_field_id: string; value: string }[] = [];
 
-      // 2) Skip numbers already in this account. One read of the
-      //    generated `phone_normalized` column (migration 022) → Set.
-      const { data: existingRows } = await supabase
-        .from('contacts')
-        .select('phone_normalized')
-        .eq('account_id', accountId);
-      const existing = new Set(
-        (existingRows ?? [])
-          .map(
-            (r) => (r as { phone_normalized: string | null }).phone_normalized
-          )
-          .filter((p): p is string => !!p)
-      );
-
-      const toInsert = unique.filter((row) => {
-        if (existing.has(normalizeKey(row.phone))) {
-          skipped++;
-          return false;
-        }
-        return true;
-      });
-
-      // 3) Resolve tag names → ids (admin+ may auto-create missing tags).
-      //    Skip the round-trip when the import carries no tag names.
-      const allTagNames = toInsert.flatMap((row) => row.tagNames);
+      const allTagNames = importable.flatMap((r) => r.mapped.tagNames);
       let tagIdByKey = new Map<string, string>();
       let skippedNames: string[] = [];
       if (allTagNames.length > 0) {
@@ -262,51 +240,54 @@ export function ImportModal({
         }));
       }
 
-      const tagAssignments: ContactTagAssignment[] = [];
-
-      // 4) Batch insert the genuinely-new rows in chunks of 50. The DB
-      //    unique index is the backstop: a 23505 (race, or a format
-      //    that normalizes equal) counts as skipped, not failed.
       const chunkSize = 50;
+      for (let i = 0; i < importable.length; i += chunkSize) {
+        const chunk = importable.slice(i, i + chunkSize);
+        const rows = chunk.map(({ mapped }) => {
+          const type = (mapped.type.trim().toLowerCase() === 'customer' ? 'customer' : 'lead') as
+            | 'lead'
+            | 'customer';
+          const rowConsent = mapped.consentRaw.trim()
+            ? ['yes', 'y', 'true', '1'].includes(mapped.consentRaw.trim().toLowerCase())
+            : bulkConsent;
+          return {
+            user_id: user.id,
+            account_id: accountId,
+            phone: mapped.phone.trim(),
+            name: mapped.name.trim() || null,
+            email: mapped.email.trim() || null,
+            company: mapped.company.trim() || null,
+            contact_type: type,
+            source: mapped.source.trim() || 'Import',
+            consent_given: rowConsent,
+            consent_source: rowConsent ? 'import' : null,
+            consent_at: rowConsent ? nowIso : null,
+          };
+        });
 
-      for (let i = 0; i < toInsert.length; i += chunkSize) {
-        const chunk = toInsert.slice(i, i + chunkSize);
-        const rows = chunk.map((row) => ({
-          user_id: user.id,
-          account_id: accountId,
-          phone: row.phone,
-          name: row.name || null,
-          email: row.email || null,
-          company: row.company || null,
-        }));
-
-        const { data, error } = await supabase
-          .from('contacts')
-          .insert(rows)
-          .select('id');
+        const { data, error } = await supabase.from('contacts').insert(rows).select('id, contact_type');
 
         if (error) {
-          // Retry individually so one bad/duplicate row doesn't sink
-          // the whole chunk.
           for (let j = 0; j < rows.length; j++) {
             const row = rows[j];
             const source = chunk[j];
             const { data: singleData, error: singleErr } = await supabase
               .from('contacts')
               .insert(row)
-              .select('id')
+              .select('id, contact_type')
               .single();
-
             if (!singleErr && singleData) {
               imported++;
-              if (source.tagNames.length > 0) {
-                tagAssignments.push({
-                  contactId: singleData.id,
-                  tagNames: source.tagNames,
-                });
+              if (singleData.contact_type === 'customer') customers++;
+              else leads++;
+              if (source.mapped.tagNames.length > 0) {
+                tagAssignments.push({ contactId: singleData.id, tagNames: source.mapped.tagNames });
+              }
+              for (const [fieldId, value] of Object.entries(source.mapped.customValues)) {
+                if (value.trim()) customValueRows.push({ contact_id: singleData.id, custom_field_id: fieldId, value: value.trim() });
               }
             } else if (isUniqueViolation(singleErr)) {
-              skipped++;
+              // Raced with another insert since our existence check.
             } else {
               failed++;
             }
@@ -314,282 +295,282 @@ export function ImportModal({
         } else {
           const inserted = data ?? [];
           imported += inserted.length;
-          // inserted[j] ↔ chunk[j] only holds because a single INSERT
-          // preserves RETURNING order. If this path is ever split into
-          // parallel inserts, zip by phone or returned id instead.
           for (let j = 0; j < inserted.length; j++) {
             const source = chunk[j];
-            if (!source || source.tagNames.length === 0) continue;
-            tagAssignments.push({
-              contactId: inserted[j].id,
-              tagNames: source.tagNames,
-            });
+            if (!source) continue;
+            if (inserted[j].contact_type === 'customer') customers++;
+            else leads++;
+            if (source.mapped.tagNames.length > 0) {
+              tagAssignments.push({ contactId: inserted[j].id, tagNames: source.mapped.tagNames });
+            }
+            for (const [fieldId, value] of Object.entries(source.mapped.customValues)) {
+              if (value.trim()) customValueRows.push({ contact_id: inserted[j].id, custom_field_id: fieldId, value: value.trim() });
+            }
           }
         }
       }
 
-      // 5) Wire tags onto the contacts we just created. Failure here must
-      //    not mask a successful contact import.
-      let tagsAssigned = 0;
-      try {
-        tagsAssigned = await assignImportedContactTags(
-          supabase,
-          tagAssignments,
-          tagIdByKey
-        );
-      } catch {
-        toast.warning(t('toastTagsWarning'));
+      if (customValueRows.length > 0) {
+        await supabase.from('contact_custom_values').insert(customValueRows);
       }
 
-      setResult({ imported, skipped, failed, tagsAssigned });
-      if (imported > 0) {
-        toast.success(t('toastImported', { count: imported }));
-        onImported();
+      let tagsAssigned = 0;
+      try {
+        tagsAssigned = await assignImportedContactTags(supabase, tagAssignments, tagIdByKey);
+      } catch {
+        toast.warning('Contacts imported, but tag assignment failed.');
       }
-      if (tagsAssigned > 0) {
-        toast.success(t('toastTagsAssigned', { count: tagsAssigned }));
+
+      setResult({ imported, leads, customers, skipped, failed, tagsAssigned });
+      setStep('result');
+      if (imported > 0) {
+        toast.success(`Imported ${imported} contact${imported === 1 ? '' : 's'}`);
+        onImported();
       }
       if (skippedNames.length > 0) {
         const sample = skippedNames.slice(0, 3).join(', ');
-        const more =
-          skippedNames.length > 3 ? ` (+${skippedNames.length - 3} more)` : '';
-        toast.info(t('toastTagsSkipped', { sample, more }));
+        toast.info(`Some tags weren't created: ${sample}${skippedNames.length > 3 ? ` (+${skippedNames.length - 3} more)` : ''}`);
       }
-      if (skipped > 0) {
-        toast.info(t('toastSkipped', { count: skipped }));
-      }
-      if (failed > 0) {
-        toast.error(t('toastFailed', { count: failed }));
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t('toastError');
-      toast.error(message);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Import failed.');
     } finally {
       setImporting(false);
     }
   }
 
-  const preview = parsedRows.slice(0, PREVIEW_LIMIT);
-  // Tags: OR — show when the CSV declares a column or preview rows carry
-  // values, so an all-empty tags column still renders for validation.
-  const previewHasTags =
-    hasTagsColumn || preview.some((row) => row.tagNames.length > 0);
-  // Company: AND — hide unless the CSV declares it and preview has data,
-  // avoiding an all-dash column that wastes horizontal space.
-  const previewHasCompany =
-    hasCompanyColumn && preview.some((row) => row.company?.trim());
-
-  const tagStats = useMemo(() => {
-    const names = new Set<string>();
-    let rowsWithTags = 0;
-    for (const row of parsedRows) {
-      if (row.tagNames.length === 0) continue;
-      rowsWithTags++;
-      for (const name of row.tagNames) names.add(name.trim().toLowerCase());
-    }
-    return { unique: names.size, rowsWithTags };
-  }, [parsedRows]);
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex max-h-[min(90vh,720px)] flex-col gap-0 overflow-hidden border-border/80 bg-popover p-0 text-popover-foreground sm:max-w-2xl">
-        <div className="shrink-0 space-y-4 border-b border-border/80 px-6 pt-6 pb-5">
+      <DialogContent className="flex max-h-[min(90vh,760px)] flex-col gap-0 overflow-hidden border-border/80 bg-popover p-0 text-popover-foreground sm:max-w-3xl">
+        <div className="shrink-0 space-y-3 border-b border-border/80 px-6 pt-6 pb-4">
           <DialogHeader className="gap-1.5">
-            <DialogTitle className="text-lg text-popover-foreground">
-              {t('title')}
-            </DialogTitle>
-            <DialogDescription className="leading-relaxed text-muted-foreground"
-              dangerouslySetInnerHTML={{
-                __html: t.markup('desc', {
-                  phoneCode: (chunks) => `<code class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">${chunks}</code>`,
-                  nameCode: (chunks) => `<code class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">${chunks}</code>`,
-                  emailCode: (chunks) => `<code class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">${chunks}</code>`,
-                  companyCode: (chunks) => `<code class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">${chunks}</code>`,
-                  tagsCode: (chunks) => `<code class="rounded bg-muted px-1 py-0.5 text-[11px] text-muted-foreground">${chunks}</code>`,
-                })
-              }}
-            />
+            <DialogTitle className="text-lg text-popover-foreground">Import contacts</DialogTitle>
+            <DialogDescription className="text-muted-foreground">
+              {step === 'upload' && 'Upload a CSV, then map its columns to fields -- no fixed header names required.'}
+              {step === 'map' && 'Tell us which column is which. We guessed based on your headers -- check and adjust.'}
+              {step === 'preview' && `Review every row before importing. Fix a cell by clicking it, or remove a row.`}
+              {step === 'result' && 'Import complete.'}
+            </DialogDescription>
           </DialogHeader>
-
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ')
-                fileInputRef.current?.click();
-            }}
-            className={cn(
-              'group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-5 transition-all',
-              file
-                ? 'border-primary/35 bg-primary/[0.04]'
-                : 'hover:border-primary/40 border-border/80 bg-background/40 hover:bg-background/70'
-            )}
-          >
-            {file ? (
-              <>
-                <div className="bg-primary/15 ring-primary/25 flex size-10 items-center justify-center rounded-lg ring-1">
-                  <FileText className="text-primary size-5" />
-                </div>
-                <p
-                  className="max-w-full truncate px-2 text-sm font-medium text-popover-foreground"
-                  title={file.name}
-                >
-                  {truncateFilename(file.name)}
-                </p>
-                <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                  {t('rowsReady', { count: parsedRows.length })}
-                </span>
-              </>
-            ) : (
-              <>
-                <div className="flex size-10 items-center justify-center rounded-lg bg-muted/80 ring-1 ring-border/80 transition-colors group-hover:bg-muted">
-                  <Upload className="size-5 text-muted-foreground group-hover:text-foreground" />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {t('uploadDropzone')}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {t('uploadHint')}
-                </p>
-              </>
-            )}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={handleFileChange}
-            className="hidden"
-          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          {preview.length > 0 && !result && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                  {t('preview', { count: preview.length })}
-                </p>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {tagStats.rowsWithTags > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-muted/90 px-2 py-0.5 text-[11px] text-muted-foreground">
-                      <Tag className="text-primary/80 size-3" />
-                      {t('previewTags', { tags: tagStats.unique, contacts: tagStats.rowsWithTags })}
-                    </span>
-                  )}
-                </div>
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+                className={cn(
+                  'group flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-6 transition-all',
+                  file ? 'border-primary/35 bg-primary/[0.04]' : 'hover:border-primary/40 border-border/80 bg-background/40 hover:bg-background/70',
+                )}
+              >
+                {file ? (
+                  <>
+                    <div className="bg-primary/15 ring-primary/25 flex size-10 items-center justify-center rounded-lg ring-1">
+                      <FileText className="text-primary size-5" />
+                    </div>
+                    <p className="max-w-full truncate px-2 text-sm font-medium text-popover-foreground" title={file.name}>
+                      {truncateFilename(file.name)}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex size-10 items-center justify-center rounded-lg bg-muted/80 ring-1 ring-border/80 transition-colors group-hover:bg-muted">
+                      <Upload className="size-5 text-muted-foreground group-hover:text-foreground" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">Click to choose a CSV file</p>
+                  </>
+                )}
               </div>
+              <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleFileChange} className="hidden" />
 
-              <div className="overflow-hidden rounded-xl border border-border ring-1 ring-border/50">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[32rem] text-xs">
-                    <thead>
-                      <tr className="border-b border-border bg-background/60">
-                        <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                          {t('columns.phone')}
-                        </th>
-                        <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                          {t('columns.name')}
-                        </th>
-                        <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                          {t('columns.email')}
-                        </th>
-                        {previewHasCompany && (
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                            {t('columns.company')}
-                          </th>
-                        )}
-                        {previewHasTags && (
-                          <th className="px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground">
-                            {t('columns.tags')}
-                          </th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/70">
-                      {preview.map((row, i) => (
-                        <tr
-                          key={i}
-                          className="bg-popover/40 transition-colors hover:bg-muted/30"
-                        >
-                          <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                            <PreviewCell
-                              value={row.phone}
-                              mono
-                              maxWidth="max-w-[7.5rem]"
-                            />
-                          </td>
-                          <td className="px-3 py-2 text-popover-foreground">
-                            <PreviewCell
-                              value={row.name || '—'}
-                              maxWidth="max-w-[8.5rem]"
-                            />
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground">
-                            <PreviewCell
-                              value={row.email || '—'}
-                              maxWidth="max-w-[10rem]"
-                            />
-                          </td>
-                          {previewHasCompany && (
-                            <td className="px-3 py-2 text-muted-foreground">
-                              <PreviewCell
-                                value={row.company || '—'}
-                                maxWidth="max-w-[7rem]"
-                              />
-                            </td>
-                          )}
-                          {previewHasTags && (
-                            <td className="px-3 py-2 align-top">
-                              <ImportPreviewTags
-                                tagNames={row.tagNames}
-                                tagColorByKey={tagColorByKey}
-                              />
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => downloadSampleCsv(customFields)}
+                className="border-border text-muted-foreground hover:bg-muted"
+              >
+                <Download className="size-4" />
+                Download sample CSV
+              </Button>
 
-              {parsedRows.length > PREVIEW_LIMIT && (
-                <p className="text-center text-[11px] text-muted-foreground">
-                  {t('moreRows', { count: parsedRows.length - PREVIEW_LIMIT })}
+              <div className="rounded-lg border border-border bg-background/50 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Field format guide
                 </p>
-              )}
+                <dl className="space-y-1.5 text-xs">
+                  {SYSTEM_FIELDS.filter((f) => f.key !== 'ignore').map((f) => (
+                    <div key={f.key} className="flex gap-2">
+                      <dt className="w-16 shrink-0 font-medium text-foreground">
+                        {f.label}
+                        {f.required && <span className="text-red-400"> *</span>}
+                      </dt>
+                      <dd className="text-muted-foreground">{f.hint}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
             </div>
           )}
 
-          {result && (
+          {step === 'map' && (
+            <div className="space-y-3">
+              <div className="overflow-hidden rounded-xl border border-border">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border bg-background/60">
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">CSV column</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Example value</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Maps to</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/70">
+                    {headers.map((h, i) => (
+                      <tr key={i} className="bg-popover/40">
+                        <td className="px-3 py-2 font-medium text-popover-foreground">{h || `Column ${i + 1}`}</td>
+                        <td className="max-w-[10rem] truncate px-3 py-2 text-muted-foreground" title={rawRows[0]?.[i]}>
+                          {rawRows[0]?.[i] || '—'}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Select
+                            value={columnMapping[i] ?? 'ignore'}
+                            onValueChange={(v) => v && setColumnMapping((prev) => ({ ...prev, [i]: v }))}
+                          >
+                            <SelectTrigger className="h-8 w-full bg-muted border-border text-foreground">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="bg-popover border-border">
+                              {mappingTargets.map((t) => (
+                                <SelectItem key={t.key} value={t.key} className="text-popover-foreground">
+                                  {t.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">{rawRows.length} row(s) found in this file.</p>
+            </div>
+          )}
+
+          {step === 'preview' && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-primary">
+                  <CheckCircle className="size-3.5" /> {importableCount} ready to import
+                </span>
+                {errorRowCount > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-red-500">
+                    <AlertTriangle className="size-3.5" /> {errorRowCount} need fixing (won&apos;t be imported as-is)
+                  </span>
+                )}
+              </div>
+
+              <div className="max-h-[22rem] overflow-auto rounded-xl border border-border">
+                <table className="w-full min-w-[52rem] text-xs">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b border-border">
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Phone *</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Name</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Email</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Company</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Type</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Source</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Consent</th>
+                      <th className="px-2 py-2 text-left font-medium text-muted-foreground">Tags</th>
+                      <th className="px-2 py-2" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/70">
+                    {previewRows.map((row, i) => {
+                      const err = row.validation.errors;
+                      const cellCls = (key: string) =>
+                        cn('h-7 border-0 bg-transparent text-xs', err[key] && 'ring-1 ring-red-500 bg-red-500/10');
+                      return (
+                        <tr key={i} className="bg-popover/40">
+                          <td className="px-1 py-1" title={err.phone}>
+                            <Input value={row.mapped.phone} onChange={(e) => updateCell(i, { phone: e.target.value })} className={cellCls('phone')} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <Input value={row.mapped.name} onChange={(e) => updateCell(i, { name: e.target.value })} className={cellCls('name')} />
+                          </td>
+                          <td className="px-1 py-1" title={err.email}>
+                            <Input value={row.mapped.email} onChange={(e) => updateCell(i, { email: e.target.value })} className={cellCls('email')} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <Input value={row.mapped.company} onChange={(e) => updateCell(i, { company: e.target.value })} className={cellCls('company')} />
+                          </td>
+                          <td className="px-1 py-1" title={err.type}>
+                            <Input value={row.mapped.type} onChange={(e) => updateCell(i, { type: e.target.value })} placeholder="lead" className={cellCls('type')} />
+                          </td>
+                          <td className="px-1 py-1">
+                            <Input value={row.mapped.source} onChange={(e) => updateCell(i, { source: e.target.value })} className={cellCls('source')} />
+                          </td>
+                          <td className="px-1 py-1" title={err.consent}>
+                            <Input value={row.mapped.consentRaw} onChange={(e) => updateCell(i, { consentRaw: e.target.value })} placeholder="no" className={cellCls('consent')} />
+                          </td>
+                          <td className="px-1 py-1 text-muted-foreground">
+                            {row.mapped.tagNames.join(', ') || '—'}
+                          </td>
+                          <td className="px-1 py-1">
+                            <button type="button" onClick={() => deleteRow(i)} className="text-muted-foreground hover:text-red-500" aria-label="Remove row">
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <label className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={bulkConsent}
+                  onChange={(e) => setBulkConsent(e.target.checked)}
+                  className="mt-0.5 size-3.5 accent-primary"
+                />
+                <span>
+                  I confirm the contacts in this file (that don&apos;t already have a Consent column value) have
+                  agreed to be contacted on WhatsApp. Meta can restrict numbers that message people without consent.
+                </span>
+              </label>
+            </div>
+          )}
+
+          {step === 'result' && result && (
             <div className="rounded-xl border border-border bg-background/50 p-4">
-              <p className="text-sm font-medium text-popover-foreground">{t('importComplete')}</p>
+              <p className="text-sm font-medium text-popover-foreground">Import complete</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {result.imported > 0 && (
                   <div className="text-primary flex items-center gap-1.5 text-sm">
                     <CheckCircle className="size-4 shrink-0" />
-                    {t('resultImported', { count: result.imported })}
+                    {result.imported} imported ({result.leads} lead{result.leads === 1 ? '' : 's'}, {result.customers} customer{result.customers === 1 ? '' : 's'})
                   </div>
                 )}
                 {result.tagsAssigned > 0 && (
                   <div className="flex items-center gap-1.5 text-sm text-cyan-400">
                     <CheckCircle className="size-4 shrink-0" />
-                    {t('resultTags', { count: result.tagsAssigned })}
+                    {result.tagsAssigned} tags assigned
                   </div>
                 )}
                 {result.skipped > 0 && (
                   <div className="flex items-center gap-1.5 text-sm text-amber-400">
                     <AlertTriangle className="size-4 shrink-0" />
-                    {t('resultSkipped', { count: result.skipped })}
+                    {result.skipped} skipped (had errors)
                   </div>
                 )}
                 {result.failed > 0 && (
                   <div className="flex items-center gap-1.5 text-sm text-red-400">
                     <XCircle className="size-4 shrink-0" />
-                    {t('resultFailed', { count: result.failed })}
+                    {result.failed} failed
                   </div>
                 )}
               </div>
@@ -597,28 +578,46 @@ export function ImportModal({
           )}
         </div>
 
-        <DialogFooter className="mt-0 shrink-0 gap-2 border-t border-border/80 bg-background/50 px-6 py-4 sm:justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            className="border-border text-muted-foreground hover:bg-muted"
-          >
-            {result ? t('close') : t('cancel')}
-          </Button>
-          {!result && (
-            <Button
-              type="button"
-              disabled={parsedRows.length === 0 || importing}
-              onClick={handleImport}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              {importing && <Loader2 className="size-4 animate-spin" />}
-              {parsedRows.length > 0 ? t('importBtn', { count: parsedRows.length }) : t('importBtn', { count: 0 })}
+        <DialogFooter className="mt-0 shrink-0 gap-2 border-t border-border/80 bg-background/50 px-6 py-4 sm:justify-between">
+          <div>
+            {(step === 'map' || step === 'preview') && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setStep(step === 'map' ? 'upload' : 'map')}
+                className="text-muted-foreground hover:bg-muted"
+              >
+                <ArrowLeft className="size-4" />
+                Back
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} className="border-border text-muted-foreground hover:bg-muted">
+              {step === 'result' ? 'Close' : 'Cancel'}
             </Button>
-          )}
+            {step === 'map' && (
+              <Button type="button" onClick={proceedToPreview} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                Preview
+              </Button>
+            )}
+            {step === 'preview' && (
+              <Button
+                type="button"
+                disabled={importableCount === 0 || importing}
+                onClick={handleImport}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                {importing && <Loader2 className="size-4 animate-spin" />}
+                Import {importableCount} contact{importableCount === 1 ? '' : 's'}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
+
+// Re-exported so a caller (e.g. a "Download template" link elsewhere) can build the same CSV without opening the modal.
+export { buildSampleCsv };
