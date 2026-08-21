@@ -24,6 +24,9 @@ export interface ApiContact {
   email: string | null;
   company: string | null;
   avatar_url: string | null;
+  contact_type: 'lead' | 'customer';
+  source: string | null;
+  consent_given: boolean;
   tags: { id: string; name: string; color: string }[];
   created_at: string;
   updated_at: string;
@@ -51,6 +54,9 @@ export function serializeContact(row: Record<string, unknown>): ApiContact {
     email: (row.email as string | null) ?? null,
     company: (row.company as string | null) ?? null,
     avatar_url: (row.avatar_url as string | null) ?? null,
+    contact_type: (row.contact_type as 'lead' | 'customer' | undefined) ?? 'lead',
+    source: (row.source as string | null) ?? null,
+    consent_given: (row.consent_given as boolean | undefined) ?? false,
     tags: joins
       .map((j) => j.tags)
       .filter((t): t is NonNullable<RawTagJoin['tags']> => t != null)
@@ -99,6 +105,9 @@ export interface ContactInput {
   name?: string | null;
   email?: string | null;
   company?: string | null;
+  contactType?: 'lead' | 'customer';
+  source?: string | null;
+  consentGiven?: boolean;
 }
 
 /**
@@ -133,6 +142,12 @@ export async function findOrCreateContact(
       name: input.name ?? sanitized,
       email: input.email ?? null,
       company: input.company ?? null,
+      contact_type: input.contactType ?? 'lead',
+      source: input.source ?? 'API',
+      consent_given: input.consentGiven ?? false,
+      ...(input.consentGiven
+        ? { consent_source: 'api', consent_at: new Date().toISOString() }
+        : {}),
     })
     .select('id')
     .single();

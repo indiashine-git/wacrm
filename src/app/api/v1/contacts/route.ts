@@ -121,6 +121,9 @@ export async function POST(request: Request) {
         name: typeof body.name === 'string' ? body.name : undefined,
         email: typeof body.email === 'string' ? body.email : undefined,
         company: typeof body.company === 'string' ? body.company : undefined,
+        contactType: body.contact_type === 'customer' ? 'customer' : undefined,
+        source: typeof body.source === 'string' ? body.source : undefined,
+        consentGiven: typeof body.consent_given === 'boolean' ? body.consent_given : undefined,
       }
     );
 
