@@ -381,7 +381,9 @@ export function Step3Personalize({
                                   ? 'No custom fields'
                                   : 'Select custom field…'
                             }
-                          />
+                          >
+                            {customFields.find((f) => f.id === mapping.value)?.field_name}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent className="border-border bg-popover">
                           {customFields.map((f) => (

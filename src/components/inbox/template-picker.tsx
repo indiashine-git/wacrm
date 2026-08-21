@@ -166,7 +166,9 @@ function MappingRow({
         ) : mapping.type === "field" ? (
           <Select value={mapping.value || undefined} onValueChange={(val) => onChange({ value: val || "" })}>
             <SelectTrigger className="w-full border-border bg-muted text-foreground">
-              <SelectValue placeholder="Select contact field…" />
+              <SelectValue placeholder="Select contact field…">
+                {CONTACT_FIELDS.find((f) => f.value === mapping.value)?.label}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="border-border bg-popover">
               {CONTACT_FIELDS.map((f) => (
@@ -179,7 +181,9 @@ function MappingRow({
         ) : (
           <Select value={mapping.value || undefined} onValueChange={(val) => onChange({ value: val || "" })}>
             <SelectTrigger className="w-full border-border bg-muted text-foreground">
-              <SelectValue placeholder={customFields.length === 0 ? "No custom fields" : "Select custom field…"} />
+              <SelectValue placeholder={customFields.length === 0 ? "No custom fields" : "Select custom field…"}>
+                {customFields.find((f) => f.id === mapping.value)?.field_name}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent className="border-border bg-popover">
               {customFields.map((f) => (
