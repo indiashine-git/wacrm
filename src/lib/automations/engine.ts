@@ -24,6 +24,8 @@ import { MAX_TAG_CHAIN_DEPTH, getTagChainDepth } from '@/lib/contacts/tag-chain'
 import { engineSendText, engineSendTemplate, engineSendInteractive } from './meta-send'
 import { validateInteractivePayload } from '@/lib/whatsapp/interactive'
 import { isDeliverableUrl } from '@/lib/webhooks/ssrf'
+import { decrypt } from '@/lib/whatsapp/encryption'
+import { getAccessToken, appendSheetRow } from '@/lib/google-sheets/client'
 
 // ------------------------------------------------------------
 // Public API
@@ -669,6 +671,26 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       })
       if (!res.ok) throw new Error(`webhook returned ${res.status}`)
       return `webhook ${res.status}`
+    }
+
+    case 'add_sheet_row': {
+      const cfg = step.step_config as { values?: string[] }
+      if (!Array.isArray(cfg.values) || cfg.values.length === 0) {
+        throw new Error('add_sheet_row needs at least one value')
+      }
+      const { data: sheetConfig } = await db
+        .from('google_sheets_config')
+        .select('service_account_json_encrypted, spreadsheet_id, sheet_name')
+        .eq('account_id', args.automation.account_id)
+        .maybeSingle()
+      if (!sheetConfig) {
+        throw new Error('add_sheet_row: no Google Sheets integration configured for this account')
+      }
+      const serviceAccount = JSON.parse(decrypt(sheetConfig.service_account_json_encrypted))
+      const token = await getAccessToken(serviceAccount)
+      const values = cfg.values.map((v) => interpolate(v, args))
+      await appendSheetRow(token, sheetConfig.spreadsheet_id, sheetConfig.sheet_name, values)
+      return `row added to ${sheetConfig.sheet_name}`
     }
 
     case 'close_conversation': {

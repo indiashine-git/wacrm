@@ -20,6 +20,7 @@ import { CommercePanel } from '@/components/settings/commerce-panel';
 import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { InboundWebhooksSettings } from '@/components/settings/inbound-webhooks-settings';
+import { GoogleSheetsSettings } from '@/components/settings/google-sheets-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -87,6 +88,7 @@ function SettingsPageInner() {
       <div className="space-y-6">
         <ApiKeysSettings />
         <InboundWebhooksSettings />
+        <GoogleSheetsSettings />
       </div>
     ),
   };

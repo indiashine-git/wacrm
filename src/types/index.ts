@@ -549,7 +549,8 @@ export type AutomationStepType =
   | 'wait'
   | 'condition'
   | 'send_webhook'
-  | 'close_conversation';
+  | 'close_conversation'
+  | 'add_sheet_row';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 
@@ -665,6 +666,11 @@ export interface SendWebhookStepConfig {
   body_template?: string;
 }
 
+export interface AddSheetRowStepConfig {
+  /** Each cell, in column order. Supports {{message.text}} / {{vars.x}} interpolation, same as send_message. */
+  values: string[];
+}
+
 export type AutomationStepConfig =
   | SendMessageStepConfig
   | SendButtonsStepConfig
@@ -677,6 +683,7 @@ export type AutomationStepConfig =
   | WaitStepConfig
   | ConditionStepConfig
   | SendWebhookStepConfig
+  | AddSheetRowStepConfig
   | Record<string, never>
   | Record<string, unknown>;
 

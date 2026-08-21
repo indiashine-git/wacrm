@@ -26,6 +26,8 @@ import {
   Hourglass,
   GitBranch,
   Webhook,
+  Table2,
+  X,
   CircleSlash,
   Zap,
   Loader2,
@@ -120,6 +122,7 @@ const STEP_META: Record<AutomationStepType, StepMeta> = {
   condition: { label: "condition", icon: GitBranch, border: "border-l-amber-500" },
   send_webhook: { label: "send_webhook", icon: Webhook, border: "border-l-primary" },
   close_conversation: { label: "close_conversation", icon: CircleSlash, border: "border-l-primary" },
+  add_sheet_row: { label: "add_sheet_row", icon: Table2, border: "border-l-primary" },
 }
 
 const ADDABLE_STEPS: AutomationStepType[] = [
@@ -136,6 +139,7 @@ const ADDABLE_STEPS: AutomationStepType[] = [
   "condition",
   "send_webhook",
   "close_conversation",
+  "add_sheet_row",
 ]
 
 const TRIGGER_OPTIONS: { value: AutomationTriggerType }[] = [
@@ -198,6 +202,8 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
       return { url: "", headers: {}, body_template: "" }
     case "close_conversation":
       return {}
+    case "add_sheet_row":
+      return { values: [""] }
     default:
       return {}
   }
@@ -1561,6 +1567,46 @@ function StepEditor({
           {t("config.closeConversationHint", { defaultValue: "Sets the conversation status to \"closed\". No configuration needed." })}
         </p>
       )
+    case "add_sheet_row": {
+      const values = Array.isArray(cfg.values) ? (cfg.values as string[]) : [""]
+      return (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            Adds one row to the sheet configured in Settings → Integrations → Google Sheets. Each field
+            below is one cell, in column order. Supports {"{{message.text}}"} / {"{{vars.x}}"}.
+          </p>
+          {values.map((v, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input
+                value={v}
+                onChange={(e) => {
+                  const next = [...values]
+                  next[i] = e.target.value
+                  set({ values: next })
+                }}
+                placeholder={`Column ${i + 1}`}
+                className="bg-muted text-foreground"
+              />
+              <button
+                type="button"
+                onClick={() => set({ values: values.filter((_, idx) => idx !== i) })}
+                className="shrink-0 text-muted-foreground hover:text-red-400"
+                aria-label="Remove column"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => set({ values: [...values, ""] })}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            + Add column
+          </button>
+        </div>
+      )
+    }
     default:
       return null
   }
@@ -1596,6 +1642,10 @@ function previewFor(step: BuilderStep): string {
       return `when ${step.step_config.subject ?? "?"}`
     case "send_webhook":
       return (step.step_config.url as string) || "no url"
+    case "add_sheet_row": {
+      const values = step.step_config.values as string[] | undefined
+      return values?.filter(Boolean).join(', ') || "no values yet"
+    }
     default:
       return ""
   }
