@@ -312,7 +312,12 @@ export default function SubscriptionsPage() {
               <Label className="text-muted-foreground">Contact</Label>
               <Select value={contactId} onValueChange={(v) => v && setContactId(v)}>
                 <SelectTrigger className="w-full bg-muted border-border text-foreground">
-                  <SelectValue placeholder="Select a contact…" />
+                  <SelectValue placeholder="Select a contact…">
+                    {(() => {
+                      const c = contacts.find((c) => c.id === contactId);
+                      return c ? c.name || c.phone : undefined;
+                    })()}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-border max-h-64">
                   {contacts.map((c) => (
