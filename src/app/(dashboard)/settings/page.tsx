@@ -21,6 +21,7 @@ import { MembersTab } from '@/components/settings/members-tab';
 import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { InboundWebhooksSettings } from '@/components/settings/inbound-webhooks-settings';
 import { GoogleSheetsSettings } from '@/components/settings/google-sheets-settings';
+import { WooCommerceSettings } from '@/components/settings/woocommerce-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -89,6 +90,7 @@ function SettingsPageInner() {
         <ApiKeysSettings />
         <InboundWebhooksSettings />
         <GoogleSheetsSettings />
+        <WooCommerceSettings />
       </div>
     ),
   };
