@@ -33,6 +33,23 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+const LOST_REASONS = [
+  "Price too high",
+  "Chose a competitor",
+  "No budget",
+  "Went quiet / no response",
+  "Bad timing",
+  "Not a fit",
+  "Other",
+];
 
 interface DealFormProps {
   open: boolean;
@@ -78,6 +95,9 @@ export function DealForm({
   const [statusAction, setStatusAction] = useState<DealStatus | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [askingLostReason, setAskingLostReason] = useState(false);
+  const [lostReason, setLostReason] = useState("");
+  const [lostReasonOther, setLostReasonOther] = useState("");
 
   // Reset the form fields every time the sheet opens or its input
   // props change. This is a legitimate prop-driven sync; the rule is
@@ -216,19 +236,45 @@ export function DealForm({
 
   async function handleStatusChange(status: DealStatus) {
     if (!deal) return;
+    if (status === "lost") {
+      // Mandatory reason -- don't write the status change until the
+      // reason picker below is filled in and confirmed.
+      setAskingLostReason(true);
+      return;
+    }
     setStatusAction(status);
     const { error } = await supabase
       .from("deals")
-      .update({ status })
+      .update({ status, lost_reason: status === "open" ? null : undefined })
       .eq("id", deal.id);
     setStatusAction(null);
     if (error) {
       toast.error(t("toastFailedStatus"));
       return;
     }
-    toast.success(
-      status === "won" ? t("toastMarkedWon") : status === "lost" ? t("toastMarkedLost") : t("toastReopened"),
-    );
+    toast.success(status === "won" ? t("toastMarkedWon") : t("toastReopened"));
+    onOpenChange(false);
+    onSaved();
+  }
+
+  async function confirmMarkLost() {
+    if (!deal) return;
+    const reason = lostReason === "Other" ? lostReasonOther.trim() : lostReason;
+    if (!reason) return;
+    setStatusAction("lost");
+    const { error } = await supabase
+      .from("deals")
+      .update({ status: "lost", lost_reason: reason })
+      .eq("id", deal.id);
+    setStatusAction(null);
+    if (error) {
+      toast.error(t("toastFailedStatus"));
+      return;
+    }
+    toast.success(t("toastMarkedLost"));
+    setAskingLostReason(false);
+    setLostReason("");
+    setLostReasonOther("");
     onOpenChange(false);
     onSaved();
   }
@@ -384,48 +430,106 @@ export function DealForm({
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   {t("status")}
                 </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange("won")}
-                    disabled={!!statusAction || deal.status === "won"}
-                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {statusAction === "won" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <Check className="mr-1 h-4 w-4" />
-                        {t("markAsWon")}
-                      </>
+
+                {askingLostReason ? (
+                  <div className="space-y-2 rounded-md border border-red-500/30 bg-red-500/5 p-3">
+                    <Label className="text-xs text-foreground">Why was this deal lost?</Label>
+                    <Select value={lostReason} onValueChange={(v) => v && setLostReason(v)}>
+                      <SelectTrigger className="w-full bg-background border-border text-foreground">
+                        <SelectValue placeholder="Select a reason…" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-border">
+                        {LOST_REASONS.map((r) => (
+                          <SelectItem key={r} value={r} className="text-popover-foreground">
+                            {r}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {lostReason === "Other" && (
+                      <Input
+                        value={lostReasonOther}
+                        onChange={(e) => setLostReasonOther(e.target.value)}
+                        placeholder="Describe the reason…"
+                        className="bg-background border-border text-foreground"
+                      />
                     )}
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() => handleStatusChange("lost")}
-                    disabled={!!statusAction || deal.status === "lost"}
-                    className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
-                  >
-                    {statusAction === "lost" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setAskingLostReason(false);
+                          setLostReason("");
+                          setLostReasonOther("");
+                        }}
+                        className="flex-1 border-border text-muted-foreground hover:bg-muted"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={confirmMarkLost}
+                        disabled={
+                          !!statusAction ||
+                          !lostReason ||
+                          (lostReason === "Other" && !lostReasonOther.trim())
+                        }
+                        className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {statusAction === "lost" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Confirm lost"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => handleStatusChange("won")}
+                        disabled={!!statusAction || deal.status === "won"}
+                        className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {statusAction === "won" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Check className="mr-1 h-4 w-4" />
+                            {t("markAsWon")}
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => handleStatusChange("lost")}
+                        disabled={!!statusAction || deal.status === "lost"}
+                        className="flex-1 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                      >
                         <X className="mr-1 h-4 w-4" />
                         {t("markAsLost")}
-                      </>
+                      </Button>
+                    </div>
+                    {deal.status === "lost" && deal.lost_reason && (
+                      <p className="text-xs text-muted-foreground">
+                        Lost reason: <span className="text-foreground">{deal.lost_reason}</span>
+                      </p>
                     )}
-                  </Button>
-                </div>
-                {deal.status && deal.status !== "open" && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleStatusChange("open")}
-                    disabled={!!statusAction}
-                    className="w-full text-muted-foreground hover:text-foreground"
-                  >
-                    {t("reopenDeal")}
-                  </Button>
+                    {deal.status && deal.status !== "open" && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => handleStatusChange("open")}
+                        disabled={!!statusAction}
+                        className="w-full text-muted-foreground hover:text-foreground"
+                      >
+                        {t("reopenDeal")}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             )}

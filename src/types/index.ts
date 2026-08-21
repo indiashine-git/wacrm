@@ -407,6 +407,8 @@ export interface Deal {
   notes?: string;
   expected_close_date?: string;
   status?: DealStatus;
+  /** Why a lost deal was lost -- required when marking a deal lost (migration 053). */
+  lost_reason?: string | null;
   created_at: string;
   updated_at?: string;
   contact?: Contact;
