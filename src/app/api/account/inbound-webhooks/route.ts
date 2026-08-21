@@ -26,6 +26,26 @@ import { checkRateLimit, rateLimitResponse, RATE_LIMITS } from '@/lib/rate-limit
 const MAX_NAME_LEN = 80;
 const SAFE_COLUMNS = 'id, name, last_received_at, receive_count, created_at';
 
+/**
+ * The reverse proxy in front of this app means `request.url`'s own
+ * origin is the internal bind address (e.g. http://0.0.0.0:3000), not
+ * the real public domain -- confirmed live (a freshly-created webhook
+ * URL rendered as https://0.0.0.0:3000/... in the UI). Trust the
+ * actual incoming request's forwarded host instead of
+ * NEXT_PUBLIC_SITE_URL, which is stale on this deployment (still set
+ * to a pre-rebrand domain).
+ */
+function resolvePublicOrigin(request: Request): string {
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  if (forwardedHost) return `${forwardedProto || 'https'}://${forwardedHost}`;
+
+  const host = request.headers.get('host')?.trim();
+  if (host) return `https://${host}`;
+
+  return new URL(request.url).origin;
+}
+
 export async function GET() {
   try {
     const ctx = await getCurrentAccount();
@@ -83,7 +103,7 @@ export async function POST(request: Request) {
       {
         webhook: data,
         secret,
-        url: `${new URL(request.url).origin}/api/v1/inbound/${data.id}`,
+        url: `${resolvePublicOrigin(request)}/api/v1/inbound/${data.id}`,
       },
       { status: 201 },
     );
