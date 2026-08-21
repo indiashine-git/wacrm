@@ -29,7 +29,10 @@ CREATE POLICY woocommerce_config_delete ON woocommerce_config FOR DELETE USING (
 -- Lets the webhook receiver upsert on repeat deliveries (WooCommerce
 -- resends order.updated on every status transition) instead of
 -- creating a duplicate order row each time.
+-- A plain (non-partial) unique constraint, not a partial index: multiple
+-- NULLs are still allowed (NULL <> NULL), but PostgREST's upsert needs a
+-- real constraint name to target with ON CONFLICT -- it can't match an
+-- arbitrary partial index.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS woocommerce_order_id TEXT;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_woocommerce_order
-  ON orders(account_id, woocommerce_order_id)
-  WHERE woocommerce_order_id IS NOT NULL;
+ALTER TABLE orders ADD CONSTRAINT orders_account_woocommerce_order_unique
+  UNIQUE (account_id, woocommerce_order_id);
