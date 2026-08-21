@@ -198,6 +198,59 @@ function CreateWebhookDialog({
     }
   }
 
+  function appsScriptTemplate(url: string, secret: string): string {
+    return `function syncNewRowsToWATU() {
+  var WEBHOOK_URL = '${url}';
+  var WEBHOOK_SECRET = '${secret}';
+
+  // Expects a header row with (at least) a "phone" column. Optional:
+  // name, email, company, source, consent (yes/no).
+  var sheet = SpreadsheetApp.getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return;
+  var headers = data[0].map(function (h) { return String(h).trim().toLowerCase(); });
+
+  var props = PropertiesService.getScriptProperties();
+  var lastRow = parseInt(props.getProperty('watu_last_row') || '1', 10);
+
+  for (var i = lastRow; i < data.length; i++) {
+    var row = data[i];
+    var record = {};
+    headers.forEach(function (h, idx) { record[h] = row[idx]; });
+    if (!record.phone) continue;
+
+    var payload = {
+      event: 'contact.upsert',
+      data: {
+        phone: String(record.phone),
+        name: record.name || undefined,
+        email: record.email || undefined,
+        company: record.company || undefined,
+        source: record.source || 'Google Sheets',
+        consent_given: String(record.consent || '').toLowerCase() === 'yes'
+      }
+    };
+    var body = JSON.stringify(payload);
+    var signatureBytes = Utilities.computeHmacSha256Signature(body, WEBHOOK_SECRET);
+    var signature = signatureBytes.map(function (b) {
+      return ('0' + (b & 0xFF).toString(16)).slice(-2);
+    }).join('');
+
+    UrlFetchApp.fetch(WEBHOOK_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: body,
+      headers: { 'X-WATU-Signature': signature }
+    });
+  }
+
+  props.setProperty('watu_last_row', String(data.length));
+}
+
+// In the Apps Script editor: Triggers (clock icon) -> Add Trigger ->
+// syncNewRowsToWATU -> Time-driven -> every 5-10 minutes.`;
+  }
+
   async function copy(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -248,6 +301,31 @@ function CreateWebhookDialog({
                 <code className="text-[11px]">X-WATU-Signature: hex(HMAC-SHA256(rawBody, secret))</code>. Body:{' '}
                 <code className="text-[11px]">{'{"event":"contact.upsert","data":{"phone":"..."}}'}</code>
               </p>
+
+              <details className="rounded-md border border-border bg-background/50 p-3 text-xs">
+                <summary className="cursor-pointer select-none font-medium text-foreground">
+                  Syncing from a Google Sheet? Copy a ready-made script
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <p className="text-muted-foreground">
+                    In your sheet: Extensions → Apps Script, paste this in, then add a time-driven trigger
+                    (Triggers → Add Trigger → every 5-10 min) so new rows sync automatically. First row must
+                    be headers including at least <code className="text-[11px]">phone</code>.
+                  </p>
+                  <pre className="max-h-48 overflow-auto rounded bg-background p-2 text-[10px] leading-snug text-foreground">
+                    {appsScriptTemplate(created.url, created.secret)}
+                  </pre>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => copy(appsScriptTemplate(created.url, created.secret), 'Script')}
+                  >
+                    <Copy className="size-3.5" />
+                    Copy script
+                  </Button>
+                </div>
+              </details>
             </div>
             <DialogFooter>
               <Button
