@@ -540,9 +540,12 @@ export interface TagTriggerConfig {
 }
 
 export interface TimeBasedTriggerConfig {
-  /** Cron expression or simple HH:mm string; engine can accept either. */
-  schedule: string;
-  timezone?: string;
+  /** 'contact.created_at' (join date), or a custom_field id holding a date value (YYYY-MM-DD or any Date-parseable string). */
+  date_field: string;
+  /** Days relative to date_field. Negative = before, positive = after, 0 = on the day. */
+  offset_days: number;
+  /** Fire every year on this month/day (renewals, AMC, birthdays) rather than once on an exact date. */
+  recurring_yearly: boolean;
 }
 
 export interface InteractiveReplyTriggerConfig {

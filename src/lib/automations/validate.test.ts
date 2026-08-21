@@ -261,12 +261,16 @@ describe("validateTriggerForActivation", () => {
     ).toEqual([]);
   });
 
-  it("requires schedule on time_based triggers", () => {
+  it("requires date_field and offset_days on time_based triggers", () => {
     expect(validateTriggerForActivation("time_based", {})).toEqual([
-      { path: "trigger.schedule", message: "schedule is required" },
+      { path: "trigger.date_field", message: "a date field is required" },
+      { path: "trigger.offset_days", message: "offset_days must be a whole number" },
     ]);
     expect(
-      validateTriggerForActivation("time_based", { schedule: "0 9 * * *" }),
+      validateTriggerForActivation("time_based", {
+        date_field: "contact.created_at",
+        offset_days: -3,
+      }),
     ).toEqual([]);
   });
 

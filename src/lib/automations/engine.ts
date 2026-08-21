@@ -119,6 +119,48 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
 }
 
 /**
+ * Fire ONE already-selected automation directly, bypassing
+ * `triggerMatches` entirely. `time_based` automations are matched by
+ * the date-cron (which already computed whether this specific
+ * automation's date condition fires today) rather than by
+ * `triggerMatches` -- that function has no per-automation date logic
+ * and falls through to `true` for `time_based`, so routing a
+ * date-cron match through `runAutomationsForTrigger` would re-fire
+ * every OTHER active time_based automation in the account for that
+ * contact too. This is the safe, targeted alternative.
+ *
+ * Still does the same tenant-ownership check as the generic dispatch
+ * path, and never throws.
+ */
+export async function runSpecificAutomation(
+  automation: Automation,
+  input: DispatchInput,
+): Promise<void> {
+  try {
+    const db = supabaseAdmin()
+    if (input.contactId) {
+      const { data: owned, error: ownErr } = await db
+        .from('contacts')
+        .select('id')
+        .eq('id', input.contactId)
+        .eq('account_id', input.accountId)
+        .maybeSingle()
+      if (ownErr) {
+        console.error('[automations] contact ownership check failed:', ownErr)
+        return
+      }
+      if (!owned) {
+        console.warn('[automations] contact not in account, refusing dispatch', input.contactId)
+        return
+      }
+    }
+    await executeAutomation(automation, input)
+  } catch (err) {
+    console.error('[automations] execute failed:', automation.id, err)
+  }
+}
+
+/**
  * Resume a run that was parked at a wait step. Called from the cron
  * endpoint after it grabs a due `automation_pending_executions` row.
  */

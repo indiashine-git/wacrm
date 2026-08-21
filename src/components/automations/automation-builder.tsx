@@ -871,26 +871,78 @@ function TriggerCard({
               </div>
             )}
             {type === "time_based" && (
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                  {t("schedule")}
-                </label>
-                <Input
-                  placeholder="Cron expression or HH:mm"
-                  value={(config.schedule as string) ?? ""}
-                  onChange={(e) =>
-                    onConfigChange({ ...config, schedule: e.target.value })
-                  }
-                  className="bg-muted text-foreground"
-                />
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {t("scheduleHint")}
-                </p>
-              </div>
+              <TimeBasedTriggerFields config={config} onConfigChange={onConfigChange} />
             )}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/** Trigger config for a date-based reminder: "N days before/after this
+ *  contact's date field, every year" -- renewals, AMC, birthdays. */
+function TimeBasedTriggerFields({
+  config,
+  onConfigChange,
+}: {
+  config: Record<string, unknown>
+  onConfigChange: (config: Record<string, unknown>) => void
+}) {
+  const t = useTranslations("Automations.builder")
+  const { customFields } = useResources()
+  const dateField = (config.date_field as string) ?? ""
+  const offsetDays = typeof config.offset_days === "number" ? config.offset_days : 0
+  const recurringYearly = config.recurring_yearly !== false
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">
+          {t("dateField")}
+        </label>
+        <select
+          value={dateField}
+          onChange={(e) => onConfigChange({ ...config, date_field: e.target.value })}
+          className={SELECT_CLASS}
+        >
+          <option value="">{t("selectDateField")}</option>
+          <option value="contact.created_at">{t("contactJoinDate")}</option>
+          {customFields.length > 0 && (
+            <optgroup label={t("fields.customFields")}>
+              {customFields.map((f) => (
+                <option key={f.id} value={`custom:${f.id}`}>
+                  {f.field_name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        <p className="mt-1 text-[11px] text-muted-foreground">{t("dateFieldHint")}</p>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">
+          {t("offsetDays")}
+        </label>
+        <Input
+          type="number"
+          value={offsetDays}
+          onChange={(e) =>
+            onConfigChange({ ...config, offset_days: parseInt(e.target.value, 10) || 0 })
+          }
+          className="bg-muted text-foreground"
+        />
+        <p className="mt-1 text-[11px] text-muted-foreground">{t("offsetDaysHint")}</p>
+      </div>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={recurringYearly}
+          onChange={(e) => onConfigChange({ ...config, recurring_yearly: e.target.checked })}
+          className="size-3.5 accent-primary"
+        />
+        {t("recurringYearly")}
+      </label>
     </div>
   )
 }

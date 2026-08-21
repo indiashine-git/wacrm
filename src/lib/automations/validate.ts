@@ -183,8 +183,11 @@ export function validateTriggerForActivation(
       })
     }
   } else if (triggerType === 'time_based') {
-    if (!nonEmpty(cfg.schedule)) {
-      issues.push({ path: 'trigger.schedule', message: 'schedule is required' })
+    if (!nonEmpty(cfg.date_field)) {
+      issues.push({ path: 'trigger.date_field', message: 'a date field is required' })
+    }
+    if (typeof cfg.offset_days !== 'number' || !Number.isInteger(cfg.offset_days)) {
+      issues.push({ path: 'trigger.offset_days', message: 'offset_days must be a whole number' })
     }
   } else if (triggerType === 'tag_added') {
     if (!nonEmpty(cfg.tag_id)) {
