@@ -66,7 +66,19 @@ export function PipelineAnalytics({ stages, deals }: PipelineAnalyticsProps) {
     const weightedValue = openDeals.reduce((sum, d) => {
       const stage = stageById.get(d.stage_id);
       if (!stage) return sum;
-      const prob = computeStageProbability(stage, sortedStages);
+      // Real probability (per-deal, else the stage's configured
+      // default) takes priority the moment either is set. Falls back
+      // to the old position-based estimate only when NEITHER is
+      // configured yet, so accounts that haven't set stage
+      // probabilities (Pipelines -> pipeline settings) don't see
+      // their weighted-value stat drop to 0 -- migration 057 defaults
+      // every existing stage's default_probability to 0.
+      const prob =
+        typeof d.probability === "number"
+          ? d.probability / 100
+          : stage.default_probability > 0
+            ? stage.default_probability / 100
+            : computeStageProbability(stage, sortedStages);
       return sum + Number(d.value || 0) * prob;
     }, 0);
 
