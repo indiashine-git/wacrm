@@ -30,6 +30,8 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
   const t = useTranslations("Pipelines.card");
   const contactLabel = deal.contact?.name || deal.contact?.phone || t("noContact");
   const assigneeLabel = deal.assignee?.full_name || null;
+  const priorityColor =
+    deal.priority === "hot" ? "#ef4444" : deal.priority === "warm" ? "#f59e0b" : deal.priority === "cold" ? "#0ea5e9" : null;
 
   return (
     <button
@@ -56,6 +58,14 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
 
       <div className="flex items-start justify-between gap-2">
         <h4 className="flex-1 text-sm font-semibold leading-snug text-foreground break-words">
+          {priorityColor && (
+            <span
+              aria-hidden
+              title={deal.priority ?? undefined}
+              className="mr-1.5 inline-block h-1.5 w-1.5 shrink-0 rounded-full align-middle"
+              style={{ backgroundColor: priorityColor }}
+            />
+          )}
           {deal.title}
         </h4>
         {deal.status === "won" && (
@@ -81,8 +91,13 @@ export function DealCard({ deal, stage, onEdit, isOverlay }: DealCardProps) {
       </div>
 
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-sm font-bold text-primary">
-          {formatCurrency(deal.value, deal.currency)}
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-sm font-bold text-primary">
+            {formatCurrency(deal.value, deal.currency)}
+          </span>
+          {typeof deal.probability === "number" && deal.probability > 0 && (
+            <span className="text-[10px] text-muted-foreground">{deal.probability}%</span>
+          )}
         </span>
         {deal.expected_close_date && (
           <span className="flex items-center gap-1 text-[11px] text-muted-foreground">

@@ -116,6 +116,7 @@ export function PipelineSettings({
       name: s.name,
       color: s.color,
       position: i,
+      default_probability: s.default_probability,
     }));
 
     const [renameRes, stagesRes] = await Promise.all([
@@ -149,6 +150,7 @@ export function PipelineSettings({
         name: trimmed,
         color: newStageColor,
         position: localStages.length,
+        default_probability: 0,
       })
       .select()
       .single();
@@ -274,6 +276,11 @@ export function PipelineSettings({
                             updated[index] = { ...updated[index], color: v };
                             setLocalStages(updated);
                           }}
+                          onProbabilityChange={(v) => {
+                            const updated = [...localStages];
+                            updated[index] = { ...updated[index], default_probability: v };
+                            setLocalStages(updated);
+                          }}
                           onRemove={() => handleRemoveStage(stage.id)}
                           colors={STAGE_COLORS}
                           t={t}
@@ -368,6 +375,7 @@ function SortableStageRow({
   stage,
   onNameChange,
   onColorChange,
+  onProbabilityChange,
   onRemove,
   colors,
   t,
@@ -375,6 +383,7 @@ function SortableStageRow({
   stage: PipelineStage;
   onNameChange: (v: string) => void;
   onColorChange: (v: string) => void;
+  onProbabilityChange: (v: number) => void;
   onRemove: () => void;
   colors: string[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -410,6 +419,17 @@ function SortableStageRow({
         onChange={(e) => onNameChange(e.target.value)}
         className="h-7 flex-1 border-transparent bg-transparent text-sm text-foreground focus:border-border"
       />
+      <div className="flex shrink-0 items-center gap-1" title="Default win probability for deals entering this stage">
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          value={stage.default_probability}
+          onChange={(e) => onProbabilityChange(Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))}
+          className="h-7 w-14 border-border bg-transparent text-right text-xs text-foreground"
+        />
+        <span className="text-xs text-muted-foreground">%</span>
+      </div>
       <Button
         variant="ghost"
         size="icon-xs"

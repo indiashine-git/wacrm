@@ -392,6 +392,8 @@ export interface PipelineStage {
   name: string;
   position: number;
   color: string;
+  /** 0-100. Seeds a new deal's probability when it moves into this stage. */
+  default_probability: number;
   created_at: string;
 }
 
@@ -417,6 +419,10 @@ export interface Deal {
   status?: DealStatus;
   /** Why a lost deal was lost -- required when marking a deal lost (migration 053). */
   lost_reason?: string | null;
+  /** 0-100, defaults to the stage's default_probability when unset (migration 057). */
+  probability?: number | null;
+  /** Qualitative triage signal, separate from probability (migration 057). */
+  priority?: 'hot' | 'warm' | 'cold' | null;
   created_at: string;
   updated_at?: string;
   contact?: Contact;

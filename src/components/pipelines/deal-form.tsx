@@ -85,6 +85,8 @@ export function DealForm({
   const [assignedTo, setAssignedTo] = useState("");
   const [expectedCloseDate, setExpectedCloseDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [probability, setProbability] = useState(0);
+  const [priority, setPriority] = useState<"" | "hot" | "warm" | "cold">("");
 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -117,17 +119,32 @@ export function DealForm({
       setAssignedTo(deal.assigned_to ?? "");
       setExpectedCloseDate(deal.expected_close_date ?? "");
       setNotes(deal.notes ?? "");
+      setProbability(
+        deal.probability ?? stages.find((s) => s.id === deal.stage_id)?.default_probability ?? 0,
+      );
+      setPriority(deal.priority ?? "");
     } else {
+      const initialStageId = defaultStageId || stages[0]?.id || "";
       setTitle("");
       setValue("");
       setCurrency(defaultCurrency);
       setContactId(defaultContactId || "");
-      setStageId(defaultStageId || stages[0]?.id || "");
+      setStageId(initialStageId);
       setAssignedTo("");
       setExpectedCloseDate("");
       setNotes("");
+      setProbability(stages.find((s) => s.id === initialStageId)?.default_probability ?? 0);
+      setPriority("");
     }
   }, [open, deal, defaultStageId, defaultContactId, stages, defaultCurrency]);
+
+  // Changing the stage reseeds probability to that stage's default --
+  // matches Salesforce/HubSpot behavior. Still freely editable after.
+  function handleStageChange(newStageId: string) {
+    setStageId(newStageId);
+    const stageDefault = stages.find((s) => s.id === newStageId)?.default_probability;
+    if (stageDefault !== undefined) setProbability(stageDefault);
+  }
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Load supporting data once the sheet is open
@@ -191,6 +208,8 @@ export function DealForm({
       assigned_to: assignedTo || null,
       notes: notes.trim() || null,
       expected_close_date: expectedCloseDate || null,
+      probability,
+      priority: priority || null,
     };
 
     if (deal) {
@@ -400,7 +419,7 @@ export function DealForm({
               <Label className="text-muted-foreground">{t("stage")}</Label>
               <select
                 value={stageId}
-                onChange={(e) => setStageId(e.target.value)}
+                onChange={(e) => handleStageChange(e.target.value)}
                 className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary"
               >
                 {stages.map((s) => (
@@ -409,6 +428,44 @@ export function DealForm({
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Win probability</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={probability}
+                    onChange={(e) => setProbability(Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)))}
+                    className="border-border bg-muted text-foreground"
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-muted-foreground">Priority</Label>
+                <div className="flex overflow-hidden rounded-lg border border-border">
+                  {([
+                    { value: "hot" as const, label: "Hot", cls: "text-red-500" },
+                    { value: "warm" as const, label: "Warm", cls: "text-amber-500" },
+                    { value: "cold" as const, label: "Cold", cls: "text-sky-500" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setPriority(priority === opt.value ? "" : opt.value)}
+                      className={`flex-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+                        priority === opt.value ? `bg-muted ${opt.cls}` : "bg-transparent text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-2">
