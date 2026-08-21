@@ -18,13 +18,17 @@ export async function GET() {
       .eq('account_id', accountId)
       .maybeSingle()
 
-    // razorpay_key_secret is never sent to the client -- only whether
-    // one is already saved, same masking pattern as whatsapp_config's
-    // access_token.
+    // razorpay_key_secret / razorpay_webhook_secret are never sent to
+    // the client -- only whether one is already saved, same masking
+    // pattern as whatsapp_config's access_token.
     const hasRazorpaySecret = !!data?.razorpay_key_secret
-    if (data) delete (data as { razorpay_key_secret?: string }).razorpay_key_secret
+    const hasRazorpayWebhookSecret = !!data?.razorpay_webhook_secret
+    if (data) {
+      delete (data as { razorpay_key_secret?: string }).razorpay_key_secret
+      delete (data as { razorpay_webhook_secret?: string }).razorpay_webhook_secret
+    }
 
-    return NextResponse.json({ config: data ?? null, hasRazorpaySecret })
+    return NextResponse.json({ config: data ?? null, hasRazorpaySecret, hasRazorpayWebhookSecret })
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       return toErrorResponse(error)
@@ -43,6 +47,7 @@ export async function POST(request: Request) {
       payment_provider,
       razorpay_key_id,
       razorpay_key_secret,
+      razorpay_webhook_secret,
       upi_vpa,
       upi_payee_name,
     } = body as {
@@ -50,6 +55,7 @@ export async function POST(request: Request) {
       payment_provider?: string
       razorpay_key_id?: string
       razorpay_key_secret?: string
+      razorpay_webhook_secret?: string
       upi_vpa?: string
       upi_payee_name?: string
     }
@@ -72,6 +78,9 @@ export async function POST(request: Request) {
     // WhatsAppConfig treats the access token field.
     if (razorpay_key_secret?.trim()) {
       payload.razorpay_key_secret = encrypt(razorpay_key_secret.trim())
+    }
+    if (razorpay_webhook_secret?.trim()) {
+      payload.razorpay_webhook_secret = encrypt(razorpay_webhook_secret.trim())
     }
 
     const { error } = await supabase.from('commerce_config').upsert(payload, { onConflict: 'account_id' })

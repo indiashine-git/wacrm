@@ -29,16 +29,18 @@ interface CommerceConfigRow {
 }
 
 export function CommercePanel() {
-  const { canEditSettings } = useAuth();
+  const { canEditSettings, accountId } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasRazorpaySecret, setHasRazorpaySecret] = useState(false);
+  const [hasRazorpayWebhookSecret, setHasRazorpayWebhookSecret] = useState(false);
 
   const [catalogId, setCatalogId] = useState('');
   const [creatingCatalog, setCreatingCatalog] = useState(false);
   const [provider, setProvider] = useState<PaymentProvider>('none');
   const [razorpayKeyId, setRazorpayKeyId] = useState('');
   const [razorpayKeySecret, setRazorpayKeySecret] = useState('');
+  const [razorpayWebhookSecret, setRazorpayWebhookSecret] = useState('');
   const [upiVpa, setUpiVpa] = useState('');
   const [upiPayeeName, setUpiPayeeName] = useState('');
 
@@ -56,6 +58,7 @@ export function CommercePanel() {
           setUpiPayeeName(config.upi_payee_name ?? '');
         }
         setHasRazorpaySecret(!!data?.hasRazorpaySecret);
+        setHasRazorpayWebhookSecret(!!data?.hasRazorpayWebhookSecret);
       } catch {
         toast.error('Failed to load commerce settings');
       } finally {
@@ -75,6 +78,7 @@ export function CommercePanel() {
           payment_provider: provider,
           razorpay_key_id: razorpayKeyId,
           razorpay_key_secret: razorpayKeySecret,
+          razorpay_webhook_secret: razorpayWebhookSecret,
           upi_vpa: upiVpa,
           upi_payee_name: upiPayeeName,
         }),
@@ -85,6 +89,10 @@ export function CommercePanel() {
       if (razorpayKeySecret.trim()) {
         setHasRazorpaySecret(true);
         setRazorpayKeySecret('');
+      }
+      if (razorpayWebhookSecret.trim()) {
+        setHasRazorpayWebhookSecret(true);
+        setRazorpayWebhookSecret('');
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save commerce settings');
@@ -237,6 +245,30 @@ export function CommercePanel() {
                     disabled={!canEditSettings}
                     className="bg-background border-border text-foreground"
                   />
+                </div>
+                <div className="space-y-1.5 border-t border-border pt-3">
+                  <Label className="text-muted-foreground">
+                    Webhook secret {hasRazorpayWebhookSecret && <span className="text-primary">(saved)</span>}
+                  </Label>
+                  <Input
+                    type="password"
+                    value={razorpayWebhookSecret}
+                    onChange={(e) => setRazorpayWebhookSecret(e.target.value)}
+                    placeholder={hasRazorpayWebhookSecret ? '••••••••••••••••' : 'Enter secret'}
+                    disabled={!canEditSettings}
+                    className="bg-background border-border text-foreground"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    From Razorpay Dashboard → Settings → Webhooks. Auto-marks an order paid the moment
+                    Razorpay confirms it, instead of waiting for someone to tap &quot;Mark as paid&quot;.
+                    Point Razorpay&apos;s webhook at:
+                  </p>
+                  {accountId && (
+                    <code className="block break-all rounded bg-background px-2 py-1.5 text-[11px] text-foreground">
+                      {`${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/razorpay/${accountId}`}
+                    </code>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">Subscribe it to the <code>payment_link.paid</code> event.</p>
                 </div>
               </div>
             )}

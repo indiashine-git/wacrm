@@ -48,6 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const amount = Number(order.total_amount)
     const currency = order.currency || 'INR'
     let paymentLink: string
+    let razorpayPaymentLinkId: string | null = null
 
     if (commerce.payment_provider === 'razorpay') {
       if (!commerce.razorpay_key_id || !commerce.razorpay_key_secret) {
@@ -77,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         )
       }
       paymentLink = data.short_url
+      razorpayPaymentLinkId = data.id
     } else {
       // UPI deep link -- opens any UPI app on tap, zero external
       // account beyond the merchant's own VPA. Works on mobile; a
@@ -100,6 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         payment_link: paymentLink,
         payment_status: 'link_sent',
         payment_provider: commerce.payment_provider,
+        razorpay_payment_link_id: razorpayPaymentLinkId,
         link_sent_at: new Date().toISOString(),
         // Resending (manually or via a reminder) restarts the reminder window.
         payment_reminder_sent_at: null,
