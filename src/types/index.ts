@@ -424,6 +424,27 @@ export interface Deal {
   assignee?: Profile;
 }
 
+export type SubscriptionStatus = 'active' | 'cancelled' | 'expired';
+
+/** Recurring service, subscription plan, or AMC/warranty -- anything with a renewal date (migration 056). */
+export interface Subscription {
+  id: string;
+  account_id: string;
+  contact_id: string | null;
+  name: string;
+  amount: number;
+  currency: string;
+  start_date: string;
+  renewal_date: string;
+  status: SubscriptionStatus;
+  /** Required when marking a subscription cancelled -- mirrors deals.lost_reason. */
+  cancellation_reason?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  contact?: Contact;
+}
+
 export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 

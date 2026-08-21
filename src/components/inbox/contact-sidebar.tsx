@@ -12,6 +12,7 @@ import type {
   CustomField,
   ContactCustomValue,
   PipelineStage,
+  Subscription,
 } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ import {
   Megaphone,
   ClipboardList,
   ShoppingBag,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +94,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tasks, setTasks] = useState<ContactTask[]>([]);
   const [orders, setOrders] = useState<ContactOrder[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
   const [addingTask, setAddingTask] = useState(false);
@@ -128,7 +131,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
     const supabase = createClient();
 
-    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes, tasksRes, ordersRes] = await Promise.all([
+    const [dealsRes, notesRes, tagsRes, fieldsRes, valuesRes, tasksRes, ordersRes, subscriptionsRes] = await Promise.all([
       supabase
         .from("deals")
         .select("*, stage:pipeline_stages(*)")
@@ -162,12 +165,18 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
         .select("*")
         .eq("contact_id", contact.id)
         .order("created_at", { ascending: false }),
+      supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("contact_id", contact.id)
+        .order("renewal_date", { ascending: true }),
     ]);
 
     if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
     if (tasksRes.data) setTasks(tasksRes.data);
     if (ordersRes.data) setOrders(ordersRes.data);
+    if (subscriptionsRes.data) setSubscriptions(subscriptionsRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
         .filter((ct: Record<string, unknown>) => ct.tags)
@@ -290,6 +299,17 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
     }
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
   }, []);
+
+  // Lifetime value -- sum of paid orders. Only meaningful when every
+  // order shares a currency (the common case, since it's set per
+  // account); mixed-currency accounts just show the first currency
+  // seen rather than attempting a conversion.
+  const lifetimeValue = useMemo(() => {
+    const paid = orders.filter((o) => o.payment_status === "paid");
+    if (paid.length === 0) return null;
+    const total = paid.reduce((sum, o) => sum + o.total_amount, 0);
+    return { total, currency: paid[0].currency, orderCount: paid.length };
+  }, [orders]);
 
   // Every field definition, not just filled ones -- so there's
   // somewhere to actually set a value for a field that's still empty
@@ -642,6 +662,18 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
               </div>
             </div>
 
+            {/* Lifetime value -- total of this contact's paid orders. */}
+            {lifetimeValue && (
+              <div className="flex items-center justify-between rounded-lg bg-primary/5 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">
+                  Lifetime value ({lifetimeValue.orderCount} paid order{lifetimeValue.orderCount === 1 ? "" : "s"})
+                </span>
+                <span className="font-medium text-foreground">
+                  {lifetimeValue.currency} {lifetimeValue.total.toFixed(2)}
+                </span>
+              </div>
+            )}
+
             {/* Orders — same compact/expand pattern as Deals. Read-only
                 here; full management (send/resend link, mark paid)
                 stays on the Orders page. */}
@@ -700,6 +732,41 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
                       </AccordionItem>
                     ))}
                   </Accordion>
+                </div>
+              </div>
+            )}
+
+            {/* Subscriptions — recurring plans / AMC / warranty commitments. */}
+            {subscriptions.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <Repeat className="h-3 w-3" />
+                  Subscriptions
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {subscriptions.map((sub) => (
+                    <div key={sub.id} className="rounded-lg bg-muted px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-xs font-medium text-foreground">{sub.name}</span>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0 text-[10px]",
+                            sub.status === "active"
+                              ? "border-emerald-600/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                              : sub.status === "cancelled"
+                                ? "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-300"
+                                : "border-border bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {sub.status}
+                        </Badge>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {sub.currency} {sub.amount.toFixed(2)} · renews {sub.renewal_date}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

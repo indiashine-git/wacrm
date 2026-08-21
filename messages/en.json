@@ -23,6 +23,7 @@
     "contacts": "Contacts",
     "pipelines": "Pipelines",
     "orders": "Orders",
+    "subscriptions": "Subscriptions",
     "broadcasts": "Broadcasts",
     "automations": "Automations",
     "flows": "Chatbot",
