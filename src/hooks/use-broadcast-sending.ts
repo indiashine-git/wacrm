@@ -31,6 +31,8 @@ export interface AudienceConfig {
   csvContacts?: { phone: string; name?: string }[];
   /** Contacts carrying any of these tags are subtracted from the result. */
   excludeTagIds?: string[];
+  /** Drop contacts with consent_given=false from the audience before sending. */
+  excludeNoConsent?: boolean;
 }
 
 export interface BroadcastPayload {
@@ -175,6 +177,10 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .in('tag_id', audience.excludeTagIds);
       const excludedIds = new Set((excludeRows ?? []).map((r) => r.contact_id));
       contacts = contacts.filter((c) => !excludedIds.has(c.id));
+    }
+
+    if (audience.excludeNoConsent) {
+      contacts = contacts.filter((c) => c.consent_given);
     }
 
     return contacts;

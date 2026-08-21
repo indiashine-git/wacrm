@@ -18,6 +18,8 @@ export interface ServerAudienceFilter {
   tagIds?: string[];
   customField?: { fieldId: string; operator: "is" | "is_not" | "contains"; value: string };
   excludeTagIds?: string[];
+  /** Drop contacts with consent_given=false from the audience before sending. */
+  excludeNoConsent?: boolean;
 }
 
 const CUSTOM_VALUE_PAGE = 500;
@@ -117,6 +119,10 @@ export async function resolveAudienceServer(
       .in("tag_id", filter.excludeTagIds);
     const excludedIds = new Set((excludeRows ?? []).map((r) => r.contact_id));
     contacts = contacts.filter((c) => !excludedIds.has(c.id));
+  }
+
+  if (filter.excludeNoConsent) {
+    contacts = contacts.filter((c) => c.consent_given);
   }
 
   return contacts;

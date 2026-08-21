@@ -13,6 +13,7 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -31,6 +32,8 @@ interface AudienceConfig {
   customField?: CustomFieldFilter;
   csvContacts?: { phone: string; name?: string }[];
   excludeTagIds?: string[];
+  /** Drop contacts with consent_given=false from the audience before sending. */
+  excludeNoConsent?: boolean;
 }
 
 interface Step2Props {
@@ -91,6 +94,7 @@ export function Step2SelectAudience({
   const [loadingFields, setLoadingFields] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [loadingCount, setLoadingCount] = useState(false);
+  const [noConsentCount, setNoConsentCount] = useState<number | null>(null);
 
   // Tags are used both by the primary "Filter by Tags" audience type
   // AND by the exclude-list below — so always load once on mount.
@@ -168,10 +172,12 @@ export function Step2SelectAudience({
         audience.csvContacts.length > 0
       ) {
         setEstimatedCount(audience.csvContacts.length);
+        setNoConsentCount(null);
         return;
       } else {
         // Partially-configured audience — wait for the user to finish.
         setEstimatedCount(null);
+        setNoConsentCount(null);
         return;
       }
 
@@ -190,6 +196,16 @@ export function Step2SelectAudience({
           (id) => !excludeSet?.has(id),
         );
         setEstimatedCount(effective.length);
+        if (effective.length > 0) {
+          const { count } = await supabase
+            .from('contacts')
+            .select('*', { count: 'exact', head: true })
+            .in('id', effective)
+            .eq('consent_given', false);
+          setNoConsentCount(count ?? 0);
+        } else {
+          setNoConsentCount(0);
+        }
       } else {
         // "All" — fetch the total, then subtract exclude set if any.
         const { count } = await supabase
@@ -197,6 +213,16 @@ export function Step2SelectAudience({
           .select('*', { count: 'exact', head: true });
         const total = count ?? 0;
         setEstimatedCount(excludeSet ? Math.max(0, total - excludeSet.size) : total);
+
+        let noConsentQuery = supabase
+          .from('contacts')
+          .select('*', { count: 'exact', head: true })
+          .eq('consent_given', false);
+        if (excludeSet && excludeSet.size > 0) {
+          noConsentQuery = noConsentQuery.not('id', 'in', `(${[...excludeSet].join(',')})`);
+        }
+        const { count: noConsent } = await noConsentQuery;
+        setNoConsentCount(noConsent ?? 0);
       }
     } finally {
       setLoadingCount(false);
@@ -436,12 +462,38 @@ export function Step2SelectAudience({
             <span className="text-xs text-muted-foreground">Calculating…</span>
           </div>
         ) : estimatedCount !== null ? (
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-primary" />
-            <span className="text-sm text-foreground">
-              {estimatedCount.toLocaleString()}
-            </span>
-            <span className="text-xs text-muted-foreground">estimated recipients</span>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary" />
+              <span className="text-sm text-foreground">
+                {(audience.excludeNoConsent && noConsentCount
+                  ? estimatedCount - noConsentCount
+                  : estimatedCount
+                ).toLocaleString()}
+              </span>
+              <span className="text-xs text-muted-foreground">estimated recipients</span>
+            </div>
+            {!!noConsentCount && (
+              <div className="space-y-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-600 dark:text-amber-300">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {noConsentCount.toLocaleString()} of these {estimatedCount.toLocaleString()}{' '}
+                    haven&apos;t recorded consent to be contacted on WhatsApp. Meta can restrict a
+                    number that messages people without consent.
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 pl-5 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={!!audience.excludeNoConsent}
+                    onChange={(e) => onUpdate({ ...audience, excludeNoConsent: e.target.checked })}
+                    className="size-3.5 accent-amber-600"
+                  />
+                  Skip contacts without recorded consent
+                </label>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">

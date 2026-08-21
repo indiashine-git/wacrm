@@ -40,6 +40,8 @@ export const CURRENCIES: CurrencyOption[] = [
   { code: "AED", label: "UAE Dirham", symbol: "د.إ" },
   { code: "ZAR", label: "South African Rand", symbol: "R" },
   { code: "NGN", label: "Nigerian Naira", symbol: "₦" },
+  { code: "UGX", label: "Ugandan Shilling", symbol: "USh" },
+  { code: "KES", label: "Kenyan Shilling", symbol: "KSh" },
   { code: "SGD", label: "Singapore Dollar", symbol: "S$" },
   { code: "MXN", label: "Mexican Peso", symbol: "$" },
   { code: "COP", label: "Colombian Peso", symbol: "$" },
