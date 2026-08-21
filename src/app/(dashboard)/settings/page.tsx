@@ -22,6 +22,7 @@ import { ApiKeysSettings } from '@/components/settings/api-keys-settings';
 import { InboundWebhooksSettings } from '@/components/settings/inbound-webhooks-settings';
 import { GoogleSheetsSettings } from '@/components/settings/google-sheets-settings';
 import { WooCommerceSettings } from '@/components/settings/woocommerce-settings';
+import { ZapierMakeSettings } from '@/components/settings/zapier-make-settings';
 import {
   resolveSection,
   type SettingsSection,
@@ -91,6 +92,7 @@ function SettingsPageInner() {
         <InboundWebhooksSettings />
         <GoogleSheetsSettings />
         <WooCommerceSettings />
+        <ZapierMakeSettings />
       </div>
     ),
   };
