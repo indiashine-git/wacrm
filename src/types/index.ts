@@ -529,7 +529,12 @@ export type AutomationTriggerType =
   /** Customer submitted a real Meta WhatsApp Flow (native in-chat
    *  form). Context.vars carries the submitted field values, keyed by
    *  each screen component's name — interpolate with {{vars.field}}. */
-  | 'flow_submitted';
+  | 'flow_submitted'
+  /** A real Meta catalog order was received -- lets a post-sale
+   *  automation (thank-you message, onboarding drip) fire right after
+   *  checkout, distinct from the generic message triggers which are
+   *  suppressed for orders to avoid re-firing the welcome menu. */
+  | 'order_created';
 
 export type AutomationStepType =
   | 'send_message'

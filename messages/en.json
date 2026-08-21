@@ -977,7 +977,11 @@
         },
         "time_based": {
           "label": "Time-Based",
-          "hint": "On a recurring schedule"
+          "hint": "N days before/after a contact's date field, e.g. a renewal reminder"
+        },
+        "order_created": {
+          "label": "Order Received",
+          "hint": "A customer submitted an order from your catalog"
         }
       },
       "trigger": "Trigger",

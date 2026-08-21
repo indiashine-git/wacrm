@@ -875,6 +875,7 @@ async function processMessage(
     | 'keyword_match'
     | 'interactive_reply'
     | 'flow_submitted'
+    | 'order_created'
   )[] = []
   // Content-level triggers are suppressed when a flow consumed the
   // message — see the comment block above. Also suppressed for a real
@@ -915,9 +916,12 @@ async function processMessage(
   // Customer submitted their picks from a catalog message -- record it
   // as a real order. Payment (if any) is a separate step the agent
   // triggers from the Orders page, not something this webhook does.
+  let createdOrderTotal: number | null = null
+  let createdOrderCurrency: string | null = null
   if (order) {
     const items = order.product_items ?? []
     const totalAmount = items.reduce((sum, item) => sum + item.item_price * item.quantity, 0)
+    const currency = items[0]?.currency ?? 'INR'
     await supabaseAdmin().from('orders').insert({
       account_id: accountId,
       contact_id: contactRecord.id,
@@ -925,9 +929,12 @@ async function processMessage(
       catalog_id: order.catalog_id,
       items,
       total_amount: totalAmount,
-      currency: items[0]?.currency ?? 'INR',
+      currency,
       customer_note: order.text ?? null,
     })
+    createdOrderTotal = totalAmount
+    createdOrderCurrency = currency
+    automationTriggers.push('order_created')
   }
   // new_contact_created fires only when the webhook just auto-created the
   // contact row. first_inbound_message fires whenever this is the contact's
@@ -958,8 +965,12 @@ async function processMessage(
         interactive_reply_id: interactiveReplyId ?? undefined,
         // Only set on a Flow submission — lets a flow_submitted
         // automation's send_message / create_deal steps interpolate
-        // {{vars.full_name}} etc. straight from the form fields.
-        vars: flowFields ?? undefined,
+        // {{vars.full_name}} etc. straight from the form fields. Order
+        // and flow submissions are mutually exclusive per message, so
+        // this is a plain either/or, not a merge.
+        vars: order
+          ? { order_total: createdOrderTotal, order_currency: createdOrderCurrency }
+          : (flowFields ?? undefined),
       },
     }).catch((err) => console.error('[automations] dispatch failed:', err))
   }

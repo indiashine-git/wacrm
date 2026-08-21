@@ -43,6 +43,10 @@ export const TRIGGER_META: Record<AutomationTriggerType, TriggerMeta> = {
     label: 'Flow Submitted',
     pillClass: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300',
   },
+  order_created: {
+    label: 'Order Received',
+    pillClass: 'border-teal-500/30 bg-teal-500/10 text-teal-600 dark:text-teal-300',
+  },
 }
 
 export function triggerMeta(t: AutomationTriggerType | string): TriggerMeta {

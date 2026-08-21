@@ -6,7 +6,8 @@ import {
   toErrorResponse,
 } from '@/lib/auth/account'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import { sendMessageToConversation, SendMessageError } from '@/lib/whatsapp/send-message'
+import { SendMessageError } from '@/lib/whatsapp/send-message'
+import { sendPaymentLinkMessage } from '@/lib/commerce/send-payment-link-message'
 
 /**
  * Generate a payment link for an order (Razorpay or a UPI deep link,
@@ -95,35 +96,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     await supabase
       .from('orders')
-      .update({ payment_link: paymentLink, payment_status: 'link_sent', payment_provider: commerce.payment_provider })
+      .update({
+        payment_link: paymentLink,
+        payment_status: 'link_sent',
+        payment_provider: commerce.payment_provider,
+        link_sent_at: new Date().toISOString(),
+        // Resending (manually or via a reminder) restarts the reminder window.
+        payment_reminder_sent_at: null,
+      })
       .eq('id', orderId)
 
     try {
-      // Always try the clean "Pay now" button first -- nicer for the
-      // customer than a raw link. Meta's cta_url button is only
-      // documented for http(s) URLs, so a upi:// deep link (no gateway
-      // account) is an unconfirmed edge case there; if Meta rejects it,
-      // fall back to plain text in the same request rather than pre-
-      // guessing and leaving UPI stuck with the ugly link forever.
-      try {
-        await sendMessageToConversation(supabase, accountId, {
-          conversationId: order.conversation_id,
-          messageType: 'interactive',
-          interactivePayload: {
-            kind: 'cta_url',
-            body: `Your order ${orderId.slice(0, 8)} is ready for payment: ${currency} ${amount.toFixed(2)}.`,
-            display_text: 'Pay now',
-            url: paymentLink,
-          },
-        })
-      } catch (ctaErr) {
-        console.warn('[payment-link] cta_url send rejected, falling back to text:', ctaErr instanceof Error ? ctaErr.message : ctaErr)
-        await sendMessageToConversation(supabase, accountId, {
-          conversationId: order.conversation_id,
-          messageType: 'text',
-          contentText: `Here's your payment link for order ${orderId.slice(0, 8)} (${currency} ${amount.toFixed(2)}):\n${paymentLink}`,
-        })
-      }
+      await sendPaymentLinkMessage(supabase, accountId, {
+        conversationId: order.conversation_id,
+        orderId,
+        amount,
+        currency,
+        paymentLink,
+      })
     } catch (sendErr) {
       // The link was generated and saved -- surface the send failure
       // separately rather than losing the link entirely.
