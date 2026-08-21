@@ -24,8 +24,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { SourceField } from '@/components/contacts/source-field';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+
+type ContactType = 'lead' | 'customer';
 
 interface ContactFormProps {
   open: boolean;
@@ -55,6 +58,9 @@ export function ContactForm({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [company, setCompany] = useState('');
+  const [contactType, setContactType] = useState<ContactType>('lead');
+  const [source, setSource] = useState('');
+  const [consentGiven, setConsentGiven] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Duplicate-phone detection for NEW contacts. `exact` (same digits)
@@ -76,6 +82,9 @@ export function ContactForm({
       setPhone(contact?.phone ?? '');
       setEmail(contact?.email ?? '');
       setCompany(contact?.company ?? '');
+      setContactType(contact?.contact_type ?? 'lead');
+      setSource(contact?.source ?? '');
+      setConsentGiven(contact?.consent_given ?? false);
       setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
       setDupMatch(null);
       fetchTags();
@@ -149,6 +158,11 @@ export function ContactForm({
 
       let contactId = contact?.id;
 
+      // Consent flips false -> true here counts as "given now" -- keep
+      // whatever earlier consent_at/source this contact already had if
+      // it was already true (don't overwrite history on an unrelated edit).
+      const consentJustGiven = consentGiven && !(isEdit && contact?.consent_given);
+
       if (isEdit && contactId) {
         const { error } = await supabase
           .from('contacts')
@@ -157,6 +171,12 @@ export function ContactForm({
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            contact_type: contactType,
+            source: source.trim() || null,
+            consent_given: consentGiven,
+            ...(consentJustGiven
+              ? { consent_source: 'manual', consent_at: new Date().toISOString() }
+              : {}),
             updated_at: new Date().toISOString(),
           })
           .eq('id', contactId);
@@ -171,6 +191,12 @@ export function ContactForm({
             phone: phone.trim(),
             email: email.trim() || null,
             company: company.trim() || null,
+            contact_type: contactType,
+            source: source.trim() || null,
+            consent_given: consentGiven,
+            ...(consentJustGiven
+              ? { consent_source: 'manual', consent_at: new Date().toISOString() }
+              : {}),
           })
           .select('id')
           .single();
@@ -322,6 +348,45 @@ export function ContactForm({
               className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
             />
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Type</Label>
+              <div className="flex overflow-hidden rounded-md border border-border">
+                {(['lead', 'customer'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setContactType(opt)}
+                    className={`flex-1 px-2 py-1.5 text-xs font-medium capitalize transition-colors ${
+                      contactType === opt
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Source</Label>
+              <SourceField accountId={accountId} value={source} onChange={setSource} />
+            </div>
+          </div>
+
+          <label className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-2.5 py-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={consentGiven}
+              onChange={(e) => setConsentGiven(e.target.checked)}
+              className="mt-0.5 size-3.5 accent-primary"
+            />
+            <span>
+              This person has agreed to be contacted on WhatsApp. Meta can restrict numbers that message
+              people without consent.
+            </span>
+          </label>
 
           <div className="space-y-2">
             <Label className="text-muted-foreground">{t('tagsLabel')}</Label>

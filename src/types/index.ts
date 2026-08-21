@@ -119,6 +119,14 @@ export interface Contact {
     body?: string;
     ctwa_clid?: string;
   } | null;
+  /** Lead until manually converted, or auto-promoted when a linked deal is won (migration 054). NOT NULL DEFAULT 'lead' in the DB; optional here since older queries/fixtures don't select it. */
+  contact_type?: 'lead' | 'customer';
+  /** Freeform -- "Website", "Referral", "Import", etc. No fixed list; the UI offers presets + create-new. */
+  source?: string | null;
+  /** WhatsApp opt-in / contact consent -- real Meta compliance concern, not just a nice-to-have. */
+  consent_given?: boolean;
+  consent_source?: string | null;
+  consent_at?: string | null;
   created_at: string;
   updated_at: string;
   /** Hydrated by queries that embed `contact_tags(tags(*))` (e.g. the

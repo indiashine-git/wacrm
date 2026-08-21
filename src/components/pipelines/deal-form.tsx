@@ -253,6 +253,18 @@ export function DealForm({
       return;
     }
     toast.success(status === "won" ? t("toastMarkedWon") : t("toastReopened"));
+
+    // Auto-identification: a won deal is the clearest signal a lead has
+    // become a paying customer. Best-effort -- never block the status
+    // change itself on this.
+    if (status === "won" && deal.contact_id) {
+      await supabase
+        .from("contacts")
+        .update({ contact_type: "customer" })
+        .eq("id", deal.contact_id)
+        .eq("contact_type", "lead");
+    }
+
     onOpenChange(false);
     onSaved();
   }
